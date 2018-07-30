@@ -4,9 +4,59 @@
 
 #include <cmath>
 
+#include <future>
+
+int future_main()
+{
+    std::promise<int> ready_promise;
+
+    std::shared_future<int> ready_future(ready_promise.get_future());
+
+    std::chrono::time_point<std::chrono::high_resolution_clock> start;
+
+    auto fun1 = [&, ready_future]() -> std::chrono::duration<double, std::milli>
+    {
+        ready_future.wait(); // waits for the signal from main()
+        auto d = std::chrono::high_resolution_clock::now() - start;
+
+        std::cout << "Fun 1 received value: " << ready_future.get() << std::endl;
+    };
+
+
+    auto fun2 = [&, ready_future]() -> std::chrono::duration<double, std::milli>
+    {
+        ready_future.wait(); // waits for the signal from main()
+        auto d = std::chrono::high_resolution_clock::now() - start;
+        std::cout << "Fun 2 received value: " << ready_future.get() << std::endl;
+    };
+
+    auto result1 = std::async(std::launch::async, fun1);
+    auto result2 = std::async(std::launch::async, fun2);
+
+
+    // the threads are ready, start the clock
+    start = std::chrono::high_resolution_clock::now();
+
+    std::this_thread::sleep_for( std::chrono::seconds(2));
+    // signal the threads to go
+    ready_promise.set_value( 5 );
+    std::this_thread::sleep_for( std::chrono::seconds(2));
+
+
+    ready_promise = std::promise<int>();
+    auto result3 = std::async(std::launch::async, fun2);
+    ready_promise.set_value( 3 );
+  // std::cout << "Thread 1 received the signal "
+  //           << result1.get().count() << " ms after start\n"
+  //           << "Thread 2 received the signal "
+  //           << result2.get().count() << " ms after start\n";
+}
+
 int main(int argc, char ** argv)
 {
-    FrameGraph2 Graph;
+//    future_main();
+//    return 0;
+    FrameGraph Graph;
 
 #define TIMENODE
 #define COS_NODE
@@ -16,7 +66,7 @@ int main(int argc, char ** argv)
 #if defined TIMENODE
     struct TimeNodeData
     {
-        resource2<double> time; // produces
+        resource<double> time; // produces
     };
 
 
@@ -27,7 +77,7 @@ int main(int argc, char ** argv)
             // The initalize Function. This is called when the
             // Node is initalized. We use this to pull resources from the BlackBoard, B, and
             // Store them in the data structure, data
-            [](TimeNodeData & data, Blackboard2 & B)
+            [](TimeNodeData & data, BlackBoard & B)
             {
                 data.time = B.produces<double>("time");
             },
@@ -36,8 +86,11 @@ int main(int argc, char ** argv)
             // data are available.
             [](TimeNodeData & data)
             {
-                std::cout << "Executing Time = 0.5 " << std::endl;
-                data.time.set(0.5);
+                static auto T0 =std::chrono::system_clock::now();
+
+                double t = std::chrono::duration<double>(std::chrono::system_clock::now() - T0).count();
+                std::cout << "Executing Time = " << t << std::endl;
+                data.time.set(t);
                 data.time.make_available();
 
             }
@@ -47,9 +100,9 @@ int main(int argc, char ** argv)
 #if defined COS_NODE
     struct CosNodeData
     {
-        resource2<double> time; // required
+        resource<double> time; // required
 
-        resource2<double> cos; // produces
+        resource<double> cos; // produces
     };
 
 
@@ -60,7 +113,7 @@ int main(int argc, char ** argv)
             // The initalize Function. This is called when the
             // Node is initalized. We use this to pull resources from the BlackBoard, B, and
             // Store them in the data structure, data
-            [](CosNodeData & data, Blackboard2 & B)
+            [](CosNodeData & data, BlackBoard & B)
             {
                 data.time = B.requires<double>("time");
                 data.cos  = B.produces<double>("cos");
@@ -80,9 +133,9 @@ int main(int argc, char ** argv)
 #if defined ADD_NODE
     struct AddData
     {
-        resource2<double> r0; // requires
-        resource2<double> r1; // requires
-        resource2<double> r2; // requires
+        resource<double> r0; // requires
+        resource<double> r1; // requires
+        resource<double> r2; // requires
     };
 
     // N2
@@ -92,7 +145,7 @@ int main(int argc, char ** argv)
             // The initalize Function. This is called when the
             // Node is initalized. We use this to pull resources from the BlackBoard, B, and
             // Store them in the data structure, data
-            [](AddData & data, Blackboard2 & B)
+            [](AddData & data, BlackBoard & B)
             {
                 data.r0 = B.requires<double>("sine");
                 data.r1 = B.requires<double>("cos");
@@ -113,9 +166,9 @@ int main(int argc, char ** argv)
 #if defined SINE_NODE
     struct SineNodeData
     {
-        resource2<double> time; // required
+        resource<double> time; // required
 
-        resource2<double> sine; // produces
+        resource<double> sine; // produces
     };
 
 
@@ -126,7 +179,7 @@ int main(int argc, char ** argv)
             // The initalize Function. This is called when the
             // Node is initalized. We use this to pull resources from the BlackBoard, B, and
             // Store them in the data structure, data
-            [](SineNodeData & data, Blackboard2 & B)
+            [](SineNodeData & data, BlackBoard & B)
             {
                 data.time   = B.requires<double>("time");
                 data.sine   = B.produces<double>("sine");
@@ -147,5 +200,8 @@ int main(int argc, char ** argv)
 
     Graph.print();
 
+    Graph.execute();
+    Graph.reset_resources();
+    std::this_thread::sleep_for( std::chrono::seconds(1));
     Graph.execute();
 }

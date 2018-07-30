@@ -76,15 +76,19 @@ public:
 
 
 template<typename T>
-class resource2
+class resource
 {
 public:
     using shared_type = std::pair<bool, T>;
 
-    resource2()
+    resource()
     {
         m_value = std::make_shared<shared_type>();
         m_value->first = false;
+    }
+
+    ~resource()
+    {
     }
 
     operator bool() const
@@ -107,6 +111,10 @@ public:
         m_value->first = true;
     }
 
+    void make_unavailable()
+    {
+        m_value->first = false;
+    }
     bool is_available()
     {
         return m_value->first;
@@ -135,6 +143,20 @@ public:
     std::vector<FrameNode_p>   m_next; // a list of FrameNodes that must be triggered when this
                                        // resource becomes available.
     std::function<bool()> isAvailable;
+    std::function<void()> MakeUnavailable;
+
+    void clear()
+    {
+        m_resource.reset();
+        m_next.clear();
+        isAvailable = std::function<bool()>();
+        MakeUnavailable = std::function<void()>();
+    }
+
+    ~ResourceNode()
+    {
+        std::cout << "Deleting Resource: " << m_name << std::endl;;
+    }
 
 };
 
@@ -151,14 +173,25 @@ public:
 
     std::set< std::shared_ptr<ResourceNode> >   m_produces; // a list of Resource Nodes that this
                                                             // FrameNode produces.
+
+    ~FrameNode()
+    {
+        std::cout << m_name << " deleted" << std::endl;
+    }
+    void clear()
+    {
+        m_NodeData.reset();
+        m_required.clear();
+        m_produces.clear();
+    }
 };
 
 
-class Blackboard2
+class BlackBoard
 {
     public:
 
-    Blackboard2(
+    BlackBoard(
             FrameNode_p         Node,
             std::map<std::string, FrameNode_p >    & FrameNodes,
             std::map<std::string, ResourceNode_p > & ResourceNodes
@@ -166,6 +199,7 @@ class Blackboard2
     {
 
     }
+
 
     template<typename T>
     ResourceNode_p create_resource(const std::string & name)
@@ -183,8 +217,9 @@ class Blackboard2
             R = std::make_shared<ResourceNode>();
             R->m_name = name;
             //R->m_Resource = std::make_shared< resource2<T> > ();
-            R->m_resource = resource2<T>();
-            R->isAvailable = [R](){ return std::any_cast< resource2<T>&>(R->m_resource).is_available(); };
+            R->m_resource = resource<T>();
+            R->isAvailable = [R](){ return std::any_cast< resource<T>&>(R->m_resource).is_available(); };
+            R->MakeUnavailable = [R](){ return std::any_cast< resource<T>&>(R->m_resource).make_available(); };
             m_ResourceNodes[name] = R;
             return R;
         }
@@ -198,7 +233,7 @@ class Blackboard2
      * Indicates that the ndoe requires a resource named, name.
      */
     template<typename T>
-    resource2<T> requires(const std::string & name)
+    resource<T> requires(const std::string & name)
     {
         std::cout << "Node " << m_Node->m_name << " Requires: " << name << std::endl;
 
@@ -208,7 +243,7 @@ class Blackboard2
 
         R->m_next.push_back( m_Node );
 
-        return std::any_cast< resource2<T> >(R->m_resource);
+        return std::any_cast< resource<T> >(R->m_resource);
     }
 
     template<typename T>
@@ -221,7 +256,7 @@ class Blackboard2
      * Registers a resource as a producer. The node will produce
      * a resource with name, name
      */
-    resource2<T> produces(const std::string & name)
+    resource<T> produces(const std::string & name)
     {
         std::cout << "Node Produces: " << name << std::endl;
 
@@ -232,7 +267,7 @@ class Blackboard2
         m_Node->m_produces.insert(R);
         m_ResourceNodes[name] = R;
 
-        return std::any_cast<resource2<T>>(R->m_resource);
+        return std::any_cast<resource<T>>(R->m_resource);
     }
 
     FrameNode_p m_Node;
@@ -247,14 +282,30 @@ class Blackboard2
 
 
 
-class FrameGraph2
+class FrameGraph
 {
   public:
 
+    ~FrameGraph()
+    {
+        std::cout << "Destroying FrameGraph: " << std::endl;
+        for(auto & a : m_FrameNodes)
+        {
+            std::cout << a.second->m_name << " use count = " << a.second.use_count() << std::endl;
+            a.second->clear();
+        }
+        for(auto & a : m_ResourceNodes)
+        {
+            std::cout << a.second->m_name << " use count = " << a.second.use_count() << std::endl;
+            a.second->clear();
+        }
+        m_FrameNodes.clear();
+        m_ResourceNodes.clear();
+    }
     template<typename T>
     void Add_Node(
             std::string const & name,
-            std::function<void(T &, Blackboard2&)> init_f,
+            std::function<void(T &, BlackBoard&)> init_f,
             std::function<void(T&)>               exec_f
             )
     {
@@ -267,7 +318,7 @@ class FrameGraph2
         N->m_name = name;
         N->m_NodeData = T();
 
-        Blackboard2 B(N, m_FrameNodes, m_ResourceNodes );
+        BlackBoard B(N, m_FrameNodes, m_ResourceNodes );
 
         init_f( std::any_cast<T&>(N->m_NodeData) , B);
 
@@ -390,6 +441,14 @@ class FrameGraph2
             }
         }
 
+    }
+
+    void reset_resources()
+    {
+        for(auto & R : m_ResourceNodes)
+        {
+            R.second->MakeUnavailable();
+        }
     }
 
 
