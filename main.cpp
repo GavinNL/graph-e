@@ -1,3 +1,90 @@
+#if 1
+
+#include "framegraph2.h"
+
+#include <memory>
+#include <iostream>
+
+
+// Node1 produces a resource
+class Node1
+{
+    public:
+
+    struct Data_t
+    {
+        Resource<int> x;
+    };
+
+    Node1(int x)
+    {
+        std::cout << "Node1 Constructed: " << x << std::endl;
+    }
+
+    ~Node1()
+    {
+        std::cout << "Node1 Destroyed" << std::endl;
+    }
+
+    void registerResources(Data_t & data, ResourceRegistry & G)
+    {
+        data.x = G.create_PromiseResource<int>("x");
+    }
+
+    void operator()(Data_t & G)
+    {
+        std::cout << "Node1 called" << std::endl;
+        //G.x->make_available();
+    }
+
+};
+
+
+class Node2
+{
+    public:
+    struct Data_t
+    {
+        Resource<int> x;
+    };
+
+    Node2(int x)
+    {
+        std::cout << "Node2 Constructed: " << x << std::endl;
+    }
+
+    ~Node2()
+    {
+        std::cout << "Node2 Destroyed" << std::endl;
+    }
+
+    void registerResources(Data_t & data, ResourceRegistry & G)
+    {
+        data.x = G.create_FutureResource<int>("x");
+    }
+
+    void operator()(Data_t & G)
+    {
+        std::cout << "Node2 called" << std::endl;
+    }
+
+};
+
+
+
+int main(int argc, char **argv)
+{
+    FrameGraph G;
+
+    G.AddNode<Node1>(3); // node added and constructed
+    G.AddNode<Node2>(3); // node added and constructed
+   // G.AddNode<Node2>(3); // node added and constructed
+
+    G.execute();
+
+    return 0;
+}
+#else
 
 #include <iostream>
 #include "framegraph.h"
@@ -89,10 +176,10 @@ int main(int argc, char ** argv)
                 static auto T0 =std::chrono::system_clock::now();
 
                 double t = std::chrono::duration<double>(std::chrono::system_clock::now() - T0).count();
-                std::cout << "Executing Time = " << t << std::endl;
+               // std::cout << "Executing Time = " << t << std::endl;
                 data.time.set(t);
                 data.time.make_available();
-
+                return true;
             }
     );
 #endif
@@ -124,8 +211,9 @@ int main(int argc, char ** argv)
             [](CosNodeData & data)
             {
                 data.cos.set( std::cos( data.time.get() ) );
-                std::cout << "Executing Cos(" << data.time.get() << ") = " << data.cos.get() << std::endl;
+               // std::cout << "Executing Cos(" << data.time.get() << ") = " << data.cos.get() << std::endl;
                 data.cos.make_available();
+                return true;
             }
     );
 #endif
@@ -159,6 +247,7 @@ int main(int argc, char ** argv)
                 auto v = data.r0.get()  + data.r1.get() + data.r2.get();
                 std::cout << "Executing ( " <<
                              data.r0.get()  << " + " << data.r1.get() << " ) = " << v << std::endl;
+                return true;
             }
     );
 #endif
@@ -190,8 +279,9 @@ int main(int argc, char ** argv)
             [](SineNodeData & data)
             {
                 data.sine.set( std::sin( data.time.get() ) );
-                std::cout << "Executing Sin(" << data.time.get() << ") = " << data.sine.get() << std::endl;
+                //std::cout << "Executing Sin(" << data.time.get() << ") = " << data.sine.get() << std::endl;
                 data.sine.make_available();
+                return true;
             }
     );
 #endif
@@ -200,8 +290,11 @@ int main(int argc, char ** argv)
 
     Graph.print();
 
-    Graph.execute();
-    Graph.reset_resources();
-    std::this_thread::sleep_for( std::chrono::seconds(1));
-    Graph.execute();
+    for(int i=0; i < 10000; i++)
+    {
+        Graph.execute();
+        Graph.reset_resources();
+    }
+
 }
+#endif
