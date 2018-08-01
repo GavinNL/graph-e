@@ -4,6 +4,42 @@
 
 #include <memory>
 #include <iostream>
+#include <fstream>
+#include <string>
+#include <sstream>
+
+class Node0
+{
+    public:
+
+    struct Data_t
+    {
+        Resource<int> w;
+        Resource<int> x;
+    };
+
+    void registerResources(Data_t & data, ResourceRegistry & G)
+    {
+        data.w = G.create_PromiseResource<int>("w");
+        data.x = G.create_PromiseResource<int>("x");
+    }
+
+    void operator()(Data_t & G)
+    {
+        std::cout << "Node0 called" << std::endl;
+        std::cout << "  w: " << 3 << std::endl;
+        std::cout << "  x: " << 1 << std::endl;
+
+
+        G.w.set(3);
+        G.w.make_available();
+        std::this_thread::sleep_for(std::chrono::seconds(3));
+        G.x.set(1);
+        G.x.make_available();
+    }
+
+};
+
 
 
 // Node1 produces a resource
@@ -13,28 +49,21 @@ class Node1
 
     struct Data_t
     {
-        Resource<int> x;
+        Resource<int> y;
     };
-
-    Node1(int x)
-    {
-        std::cout << "Node1 Constructed: " << x << std::endl;
-    }
-
-    ~Node1()
-    {
-        std::cout << "Node1 Destroyed" << std::endl;
-    }
 
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
-        data.x = G.create_PromiseResource<int>("x");
+        data.y = G.create_PromiseResource<int>("y");
     }
 
     void operator()(Data_t & G)
     {
         std::cout << "Node1 called" << std::endl;
-        //G.x->make_available();
+        std::cout << "  y: " << 2 << std::endl;
+
+        G.y.set(2);
+        G.y.make_available();
     }
 
 };
@@ -46,39 +75,92 @@ class Node2
     struct Data_t
     {
         Resource<int> x;
+        Resource<int> y;
+        Resource<int> z;
     };
-
-    Node2(int x)
-    {
-        std::cout << "Node2 Constructed: " << x << std::endl;
-    }
-
-    ~Node2()
-    {
-        std::cout << "Node2 Destroyed" << std::endl;
-    }
 
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
         data.x = G.create_FutureResource<int>("x");
+        data.y = G.create_FutureResource<int>("y");
+
+        data.z = G.create_PromiseResource<int>("z");
     }
 
     void operator()(Data_t & G)
     {
         std::cout << "Node2 called" << std::endl;
+        std::cout << "  x: " << G.x.get() << std::endl;
+        std::cout << "  y: " << G.y.get() << std::endl;
+
+        std::cout << "  z: " << 5 << std::endl;
+        G.z.set(5);
+        G.z.make_available();
     }
 
 };
 
 
+class Node3
+{
+    public:
+    struct Data_t
+    {
+        Resource<int> x;
+        Resource<int> w;
+        Resource<int> z;
+    };
+
+    void registerResources(Data_t & data, ResourceRegistry & G)
+    {
+        data.x = G.create_FutureResource<int>("x");
+        data.w = G.create_FutureResource<int>("w");
+        data.z = G.create_FutureResource<int>("z");
+    }
+
+    void operator()(Data_t & G)
+    {
+        std::cout << "Node3 called" << std::endl;
+        std::cout << "  w: " << G.w.get() << std::endl;
+        std::cout << "  x: " << G.x.get() << std::endl;
+        std::cout << "  z: " << G.z.get() << std::endl;
+    }
+
+};
+
+
+class Node4
+{
+    public:
+    struct Data_t
+    {
+        Resource<int> w;
+    };
+
+    void registerResources(Data_t & data, ResourceRegistry & G)
+    {
+        data.w = G.create_FutureResource<int>("w");
+    }
+
+    void operator()(Data_t & G)
+    {
+        std::cout << "Node4 called" << std::endl;
+        std::cout << "  w: " << G.w.get() << std::endl;
+    }
+
+};
+
 
 int main(int argc, char **argv)
 {
+
     FrameGraph G;
 
-    G.AddNode<Node1>(3); // node added and constructed
-    G.AddNode<Node2>(3); // node added and constructed
-   // G.AddNode<Node2>(3); // node added and constructed
+    G.AddNode<Node0>(); // node added and constructed
+    G.AddNode<Node1>(); // node added and constructed
+    G.AddNode<Node2>(); // node added and constructed
+    G.AddNode<Node4>(); // node added and constructed
+    G.AddNode<Node3>(); // node added and constructed
 
     G.execute();
 

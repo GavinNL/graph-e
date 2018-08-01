@@ -123,9 +123,22 @@ public:
     // a list of required resources
     std::vector<ResourceNode_p> m_requiredResources;
 
-    std::function<void(void)> execute;
-    std::function<void(void)> trigger;
+    std::function<void(void)> execute; // excutes' the node's execute() method
 
+
+  //  std::function<void(void)> trigger;
+    uint32_t m_resourceCount = 0;
+
+    void trigger()
+    {
+        ++m_resourceCount;
+        //std::cout << ""
+        if( m_resourceCount >= m_requiredResources.size())
+        {
+            std::cout << "Triggered" << std::endl;
+            execute();
+        }
+    }
 };
 
 
@@ -137,6 +150,7 @@ public:
     std::vector<ExecNode_p> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
 
+    bool is_available = false;
 };
 
 template<typename T>
@@ -147,6 +161,25 @@ public:
     T & get()
     {
         return std::any_cast<T&>(m_node->resource);
+    }
+
+    void make_available()
+    {
+        m_node->is_available = true;
+        for(auto & n : m_node->m_Nodes)
+        {
+            n->trigger();
+        }
+    }
+
+    operator T&()
+    {
+        return std::any_cast<T&>(m_node->resource);
+    }
+
+    void set(T const & x)
+    {
+        std::any_cast<T&>(m_node->resource) = x;
     }
 };
 
@@ -173,14 +206,14 @@ class ResourceRegistry
         template<typename T>
         Resource<T> create_PromiseResource(const std::string & name)
         {
-            std::cout << "Creating Promise: " << name <<std::endl;
+            //std::cout << "Creating Promise: " << name <<std::endl;
             if( m_resources.count(name) == 0 )
             {
-                std::cout << "  " << name << " not created. Creating now" << std::endl;
+                //std::cout << "  " << name << " not created. Creating now" << std::endl;
 
                 ResourceNode_p RN = std::make_shared< ResourceNode >();
                 RN->resource      = std::make_any<T>();
-                RN->name = name;
+                RN->name          = name;
                 m_resources[name] = RN;
 
                 Resource<T> r;
@@ -190,7 +223,7 @@ class ResourceRegistry
             }
             else
             {
-                std::cout << "  " << name << " already created." << std::endl;
+                //std::cout << "  " << name << " already created." << std::endl;
 
                 Resource<T> r;
                 r.m_node = m_resources.at(name);
@@ -201,10 +234,10 @@ class ResourceRegistry
         template<typename T>
         Resource<T> create_FutureResource(const std::string & name)
         {
-            std::cout << "Creating Future: " << name <<std::endl;
+            //std::cout << "Creating Future: " << name <<std::endl;
             if( m_resources.count(name) == 0 )
             {
-                std::cout << "  " << name << " not created. Creating now" << std::endl;
+                //std::cout << "  " << name << " not created. Creating now" << std::endl;
                 Resource_p<T> X = std::make_shared< Resource<T> >();
 
                 ResourceNode_p RN = std::make_shared<ResourceNode>();
@@ -222,7 +255,7 @@ class ResourceRegistry
             }
             else
             {
-                std::cout << "  " << name << " already created." << std::endl;
+                //std::cout << "  " << name << " already created." << std::endl;
 
                 ResourceNode_p RN = m_resources[name];
                 RN->m_Nodes.push_back(m_Node);
@@ -244,7 +277,7 @@ public:
     FrameGraph() {}
     ~FrameGraph()
     {
-        std::cout << "Destroying Framegraph " << std::endl;
+        //std::cout << "Destroying Framegraph " << std::endl;
 
 
     }
@@ -308,13 +341,19 @@ public:
 
     void execute()
     {
+        std::vector<ExecNode_p> zero_resources;
         for(auto & N : m_execNodes)
         {
-            std::cout << "Node ++\n  Required Resources:" << std::endl;
-            for(auto & r : N->m_requiredResources)
+            //std::cout << "                 Available Resources: " << N->m_resourceCount << std::endl;
+            if( N->m_requiredResources.size() == 0)
             {
-                std::cout << "               " << r->name << std::endl;
+                zero_resources.push_back(N);
+                //std::cout << "====== Executing: Required Resources: " << N->m_requiredResources.size() << std::endl;
             }
+        }
+        for(auto & N : zero_resources)
+        {
+            N->execute();
         }
     }
 
