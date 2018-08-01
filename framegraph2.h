@@ -12,6 +12,8 @@
 
 #include <iostream>
 
+#include "threadstreams.h"
+
 #if 0
 class ResourceBus
 {
@@ -106,6 +108,9 @@ public:
 
 #endif
 
+thread_local ThreadStreams TS;
+thread_local std::ostream & fout = TS.get_stream(  );
+#define FOUT fout << ThreadStreams::time().count() << ": "
 
 
 class ExecNode;
@@ -117,25 +122,25 @@ using ResourceNode_p = std::shared_ptr<ResourceNode>;
 class ExecNode
 {
 public:
-    std::any m_NodeClass;
-    std::any m_NodeData;
+    std::any     m_NodeClass;
+    std::any     m_NodeData;
+    std::mutex   m_mutex;
+    bool         m_executed = false;
 
     // a list of required resources
     std::vector<ResourceNode_p> m_requiredResources;
 
     std::function<void(void)> execute; // excutes' the node's execute() method
 
-
-  //  std::function<void(void)> trigger;
     uint32_t m_resourceCount = 0;
 
+    // nudge the ExecNode to check whether all its resources are available.
+    // if they are, then tell the FrameGraph to schedule its execution
     void trigger()
     {
         ++m_resourceCount;
-        //std::cout << ""
         if( m_resourceCount >= m_requiredResources.size())
         {
-            std::cout << "Triggered" << std::endl;
             execute();
         }
     }
@@ -327,7 +332,19 @@ public:
           ExecNode* rawp = N.get();
           N->execute = [rawp]()
           {
-              std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
+              if( !rawp->m_executed ) // if we haven't executed yet.
+              {
+                  if( rawp->m_mutex.try_lock() ) // try to lock the mutex
+                  {                              // if we have acquired the lock, execute the node
+                      rawp->m_executed = true;
+                      std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
+                      rawp->m_mutex.unlock();
+                  } else { // othersise skip the node
+                      FOUT << "Locked. Already executing" << std::endl;
+                  }
+              } else {
+                  FOUT << "Already Executed." << std::endl;
+              }
           };
 
           ResourceRegistry R(N,m_resources,
@@ -344,21 +361,28 @@ public:
         std::vector<ExecNode_p> zero_resources;
         for(auto & N : m_execNodes)
         {
-            //std::cout << "                 Available Resources: " << N->m_resourceCount << std::endl;
             if( N->m_requiredResources.size() == 0)
             {
                 zero_resources.push_back(N);
-                //std::cout << "====== Executing: Required Resources: " << N->m_requiredResources.size() << std::endl;
             }
         }
+
+        std::vector< std::thread > m_threads;
         for(auto & N : zero_resources)
         {
-            N->execute();
+            m_threads.emplace_back( std::thread(N->execute) );
+        }
+
+        for(auto & t : m_threads)
+        {
+            if( t.joinable()) t.join();
         }
     }
 
     std::vector< ExecNode_p > m_execNodes;
     std::map<std::string, ResourceNode_p> m_resources;
+
+    std::vector<ExecNode*> m_ToExecute;
 
 };
 

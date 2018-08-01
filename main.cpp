@@ -26,20 +26,21 @@ class Node0
 
     void operator()(Data_t & G)
     {
-        std::cout << "Node0 called" << std::endl;
-        std::cout << "  w: " << 3 << std::endl;
-        std::cout << "  x: " << 1 << std::endl;
+        FOUT << "Node0 Start" << std::endl;
 
-
-        G.w.set(3);
-        G.w.make_available();
-        std::this_thread::sleep_for(std::chrono::seconds(3));
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        FOUT << "x available!" << std::endl;
         G.x.set(1);
         G.x.make_available();
+
+        std::this_thread::sleep_for(std::chrono::seconds(1));
+        FOUT << "w available!" << std::endl;
+        G.w.set(3);
+        G.w.make_available();
+        FOUT << "Node0 End" << std::endl;
     }
 
 };
-
 
 
 // Node1 produces a resource
@@ -59,11 +60,13 @@ class Node1
 
     void operator()(Data_t & G)
     {
-        std::cout << "Node1 called" << std::endl;
-        std::cout << "  y: " << 2 << std::endl;
+        FOUT << "Node1 Start" << std::endl;
+
 
         G.y.set(2);
         G.y.make_available();
+
+        FOUT << "Node1 End" << std::endl;
     }
 
 };
@@ -89,13 +92,14 @@ class Node2
 
     void operator()(Data_t & G)
     {
-        std::cout << "Node2 called" << std::endl;
-        std::cout << "  x: " << G.x.get() << std::endl;
-        std::cout << "  y: " << G.y.get() << std::endl;
+        FOUT << "Node2 Start" << std::endl;
 
-        std::cout << "  z: " << 5 << std::endl;
+
+        FOUT << "  z: " << 5 << std::endl;
         G.z.set(5);
         G.z.make_available();
+
+        FOUT << "Node2 End" << std::endl;
     }
 
 };
@@ -120,10 +124,8 @@ class Node3
 
     void operator()(Data_t & G)
     {
-        std::cout << "Node3 called" << std::endl;
-        std::cout << "  w: " << G.w.get() << std::endl;
-        std::cout << "  x: " << G.x.get() << std::endl;
-        std::cout << "  z: " << G.z.get() << std::endl;
+        FOUT << "Node3 Start" << std::endl;
+        FOUT << "Node3 end" << std::endl;
     }
 
 };
@@ -144,11 +146,14 @@ class Node4
 
     void operator()(Data_t & G)
     {
-        std::cout << "Node4 called" << std::endl;
-        std::cout << "  w: " << G.w.get() << std::endl;
+        FOUT << "Node4 called" << std::endl;
+        FOUT << "  w: " << G.w.get() << std::endl;
     }
 
 };
+
+
+
 
 
 int main(int argc, char **argv)
@@ -188,7 +193,7 @@ int future_main()
         ready_future.wait(); // waits for the signal from main()
         auto d = std::chrono::high_resolution_clock::now() - start;
 
-        std::cout << "Fun 1 received value: " << ready_future.get() << std::endl;
+        FOUT << "Fun 1 received value: " << ready_future.get() << std::endl;
     };
 
 
@@ -196,7 +201,7 @@ int future_main()
     {
         ready_future.wait(); // waits for the signal from main()
         auto d = std::chrono::high_resolution_clock::now() - start;
-        std::cout << "Fun 2 received value: " << ready_future.get() << std::endl;
+        FOUT << "Fun 2 received value: " << ready_future.get() << std::endl;
     };
 
     auto result1 = std::async(std::launch::async, fun1);
@@ -215,7 +220,7 @@ int future_main()
     ready_promise = std::promise<int>();
     auto result3 = std::async(std::launch::async, fun2);
     ready_promise.set_value( 3 );
-  // std::cout << "Thread 1 received the signal "
+  // FOUT << "Thread 1 received the signal "
   //           << result1.get().count() << " ms after start\n"
   //           << "Thread 2 received the signal "
   //           << result2.get().count() << " ms after start\n";
@@ -258,7 +263,7 @@ int main(int argc, char ** argv)
                 static auto T0 =std::chrono::system_clock::now();
 
                 double t = std::chrono::duration<double>(std::chrono::system_clock::now() - T0).count();
-               // std::cout << "Executing Time = " << t << std::endl;
+               // FOUT << "Executing Time = " << t << std::endl;
                 data.time.set(t);
                 data.time.make_available();
                 return true;
@@ -293,7 +298,7 @@ int main(int argc, char ** argv)
             [](CosNodeData & data)
             {
                 data.cos.set( std::cos( data.time.get() ) );
-               // std::cout << "Executing Cos(" << data.time.get() << ") = " << data.cos.get() << std::endl;
+               // FOUT << "Executing Cos(" << data.time.get() << ") = " << data.cos.get() << std::endl;
                 data.cos.make_available();
                 return true;
             }
@@ -327,7 +332,7 @@ int main(int argc, char ** argv)
             [](AddData & data)
             {
                 auto v = data.r0.get()  + data.r1.get() + data.r2.get();
-                std::cout << "Executing ( " <<
+                FOUT << "Executing ( " <<
                              data.r0.get()  << " + " << data.r1.get() << " ) = " << v << std::endl;
                 return true;
             }
@@ -361,7 +366,7 @@ int main(int argc, char ** argv)
             [](SineNodeData & data)
             {
                 data.sine.set( std::sin( data.time.get() ) );
-                //std::cout << "Executing Sin(" << data.time.get() << ") = " << data.sine.get() << std::endl;
+                //FOUT << "Executing Sin(" << data.time.get() << ") = " << data.sine.get() << std::endl;
                 data.sine.make_available();
                 return true;
             }
