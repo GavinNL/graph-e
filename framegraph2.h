@@ -16,8 +16,9 @@
 
 thread_local ThreadStreams TS;
 thread_local std::ostream & fout = TS.get_stream(  );
+
 //#define FOUT fout << ThreadStreams::time().count() << ": "
-#define FOUT std::cout << ThreadStreams::time().count() << ": "
+#define FOUT std::cout << ThreadStreams::time().count() << ": " << std::this_thread::get_id() << ": "
 class barrier
 {
 private:
@@ -291,9 +292,35 @@ public:
     FrameGraph() {}
     ~FrameGraph()
     {
-        //std::cout << "Destroying Framegraph " << std::endl;
-        quit = true;
+        //std::this_thread::sleep_for( std::chrono::seconds(4));
+        std::cout << "Destroying Framegraph " << std::endl;
+
         m_cv.notify_all();
+
+        //while(m_ToExecute.size() )
+        //{
+        //    FOUT << "Main: Notifying all" << std::endl;
+        //    m_cv.notify_all();
+        //}
+
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            //m_cv.wait(lock, [this]{return !m_ToExecute.empty(); } ); // keep waiting if the queue is empty.
+
+            FOUT << "=========Main: Waiting for threads to finish" << std::endl;
+            m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
+            FOUT << "=========Main: Number of waiting threads: " << num_waiting << std::endl;
+
+            quit = true;
+        }
+        FOUT << "=========Main: Mutex Unlocked: " << num_waiting << std::endl;
+        m_cv.notify_all();
+        FOUT << "=========Main: Notifying all: " << num_waiting << std::endl;
+
+        for(auto & t : m_threads)
+        {
+            if(t.joinable()) t.join();
+        }
 
     }
 
@@ -376,7 +403,9 @@ public:
     void append_node( ExecNode * node)
     {
         m_ToExecute.push(node);
+        //FOUT << "======NOTIFYING=========" << std::endl;
         m_cv.notify_all();
+
     }
 
     /**
@@ -408,7 +437,18 @@ public:
     //==================================================
     void execute_threaded(int n)
     {
-
+        for(int i=0;i<n;i++)
+        {
+            m_threads.emplace_back(  std::thread(&FrameGraph::thread_worker, this));
+        }
+        for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
+        {
+            if( N->m_requiredResources.size() == 0)
+            {
+                m_ToExecute.push(N.get());
+            }
+        }
+        m_cv.notify_all();
     }
     //==================================================
 
@@ -432,10 +472,16 @@ public:
     std::queue<ExecNode*>                 m_ToExecute;
     bool quit=false;
 
+    std::vector< std::thread > m_threads;
 
-    std::mutex m_mutex;
+    std::mutex              m_mutex;
     std::condition_variable m_cv;
 
+    uint32_t num_running = 0;
+    uint32_t num_waiting = 0;
+
+    // Note to Self: Condition_varaible.wait( mutex ) will wait until condition_variable.notify_XXX() is called before it attempts to lock the mutex.
+    //
     void  thread_worker()
     {
         while( true )
@@ -444,13 +490,32 @@ public:
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
-                m_cv.wait(lock, [this]{return !m_ToExecute.empty(); } );
-                Job = m_ToExecute.front();
-                m_ToExecute.pop();
+                FOUT << "Waiting on Lock: " << num_running << std::endl;
+                num_waiting++;
+                m_cv.wait(lock, [this]{return !m_ToExecute.empty() || quit; } ); // keep waiting if the queue is empty.
+                //m_cv.wait(lock, [this]{return  m_ToExecute.empty(); } ); // Do not wait if queue is empty or.
+                num_waiting--;
+                FOUT << "Woken up : Running: " << num_running << "   waiting: " << num_waiting << std::endl;
+                if(quit)
+                {
+                    break;
+                }
+                if( m_ToExecute.size() )
+                {
+                    Job = m_ToExecute.front();
+                    m_ToExecute.pop();
+
+                }
             }
 
+            ++num_running;
             Job->execute(); // function<void()> type
+            --num_running;
+            FOUT << "Finished executing: Running: " << num_running << "   waiting: " << num_waiting << std::endl;
+            m_cv.notify_all();
         }
+        FOUT << "Worker Exiting: " << std::this_thread::get_id() << std::endl;
+        m_cv.notify_all();
 
     }
 

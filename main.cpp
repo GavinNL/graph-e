@@ -8,7 +8,7 @@
 #include <string>
 #include <sstream>
 
-#define WAIT //std::this_thread::sleep_for(std::chrono::milliseconds(200)); FOUT << "     |     " << std::endl;
+#define WAIT std::this_thread::sleep_for(std::chrono::milliseconds(200)); FOUT << "     |     " << std::endl;
 
 class Node0
 {
@@ -65,7 +65,7 @@ class Node1
     {
         FOUT << "Node1 Start" << std::endl;
 
-        //std::this_thread::sleep_for( std::chrono::milliseconds(750));
+        std::this_thread::sleep_for( std::chrono::milliseconds(750));
         FOUT << "y available" << std::endl;
         G.y.set(2);
         G.y.make_available();
@@ -98,7 +98,7 @@ class Node2
     {
         FOUT << "Node2 Start" << std::endl;
 
-        //std::this_thread::sleep_for( std::chrono::milliseconds(250));
+        std::this_thread::sleep_for( std::chrono::milliseconds(250));
         FOUT << "  z available: " << 5 << std::endl;
         G.z.set(5);
         G.z.make_available();
@@ -129,7 +129,7 @@ class Node3
     void operator()(Data_t & G)
     {
         FOUT << "Node3 Start" << std::endl;
-        //std::this_thread::sleep_for( std::chrono::milliseconds(500));
+        std::this_thread::sleep_for( std::chrono::milliseconds(500));
         FOUT << "Node3 end" << std::endl;
     }
 
@@ -152,7 +152,7 @@ class Node4
     void operator()(Data_t & G)
     {
         FOUT << "Node4 started" << std::endl;
-        //std::this_thread::sleep_for( std::chrono::milliseconds(250));
+        std::this_thread::sleep_for( std::chrono::milliseconds(250));
         FOUT << "Node4 ended" << std::endl;
     }
 
@@ -175,7 +175,7 @@ int main(int argc, char **argv)
 
     // Serial Execution: Nodes are executed in a single thread
     // nodes with 0 resource requirements are executed first
-    G.execute_serial();
+    //G.execute_serial();
 
 
     // Threaded Execution: Each node is executed as part of a threadpool
@@ -227,10 +227,10 @@ int future_main()
     // the threads are ready, start the clock
     start = std::chrono::high_resolution_clock::now();
 
-    //std::this_thread::sleep_for( std::chrono::seconds(2));
+    std::this_thread::sleep_for( std::chrono::seconds(2));
     // signal the threads to go
     ready_promise.set_value( 5 );
-    //std::this_thread::sleep_for( std::chrono::seconds(2));
+    std::this_thread::sleep_for( std::chrono::seconds(2));
 
 
     ready_promise = std::promise<int>();
