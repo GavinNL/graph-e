@@ -7,146 +7,119 @@
 
 #include <map>
 #include <vector>
-
+#include <queue>
 #include <any>
 
 #include <iostream>
 
 #include "threadstreams.h"
 
-#if 0
-class ResourceBus
+thread_local ThreadStreams TS;
+thread_local std::ostream & fout = TS.get_stream(  );
+//#define FOUT fout << ThreadStreams::time().count() << ": "
+#define FOUT std::cout << ThreadStreams::time().count() << ": "
+class barrier
 {
+private:
+    std::mutex mutex_;
+    std::condition_variable condition_;
+    unsigned long count_ = 0; // Initialized as locked.
+    int id=0;
 public:
-    std::map<std::string, std::shared_ptr<ResourceBase> >            & m_resources;
-
-    // list of resources that must be available
-    // before we trigger the Node's exec function
-    std::vector< std::shared_ptr<ResourceBase> > m_list;
-    std::function<void(void)> m_exec;
-
-    ResourceBus(std::map<std::string, std::shared_ptr<ResourceBase> > & resources ) : m_resources(resources)
+    barrier()
     {
-
+        static int i=1;
+        id = i++;
     }
 
-    ~ResourceBus()
+    void notify_one()
     {
-        std::cout << "Destroying Resource Bus" << std::endl;
+        //std::cout << "Notifying " << id << std::endl;
+        std::unique_lock<decltype(mutex_)> lock(mutex_);
+        ++count_;
+        condition_.notify_all();
     }
 
-    void clear()
+    void notify_all()
     {
-        m_list.clear();
-        m_exec = std::function<void(void)>();
+        ++count_;
+        condition_.notify_all();
     }
 
-    template<typename T>
-    Resource_p<T> create_PromiseResource(const std::string & name)
+    void wait()
     {
-        std::cout << "Creating Promise: " << name <<std::endl;
-        if( m_resources.count(name) == 0 )
         {
-            std::cout << "  " << name << " not created. Creating now" << std::endl;
-            Resource_p<T> X = std::make_shared< Resource<T> >();
-            m_resources[name] = X;
-            return X;
-        }
-        else
-        {
-            std::cout << "  " << name << " already created." << std::endl;
-            Resource_p<T> X = std::dynamic_pointer_cast< Resource<T> >(m_resources[name]);
-            m_list.push_back(X);
+            //std::cout << std::this_thread::get_id() << "  Waiting " << id << std::endl;
+            std::unique_lock<decltype(mutex_)> lock(mutex_);
 
-            return X;
-        }
-
-        auto X = std::make_shared< Resource<T> >();
-
-        m_resources[name] = X;
-
-        return X;
-    }
-
-    template<typename T>
-    Resource_p<T> create_FutureResource(const std::string & name)
-    {
-        std::cout << "Creating Future: " << name <<std::endl;
-        if( m_resources.count(name) == 0 )
-        {
-            std::cout << "  " << name << " not created. Creating now" << std::endl;
-            Resource_p<T> X = std::make_shared< Resource<T> >();
-            m_resources[name] = X;
-            m_list.push_back(X);
-        }
-        else
-        {
-            std::cout << "  " << name << " already created." << std::endl;
-            Resource_p<T> X = std::dynamic_pointer_cast< Resource<T> >(m_resources[name]);
-            m_list.push_back(X);
-
-            return X;
-        }
-    }
-
-    bool check()
-    {
-        std::cout << "Checking resources: " << m_list.size() << std::endl;
-        if( m_list.size() == 0)
-        {
-            m_exec();
-        }
-        for(auto & r : m_list)
-        {
-            if( r->is_available )
+            while( count_ == 0) // Handle spurious wake-ups.
             {
-                m_exec();
+                condition_.wait( lock );
             }
+
+            //std::cout << std::this_thread::get_id() << "  Woken up " << id << std::endl;
+            --count_;
         }
+        notify_all();
+    }
+
+    bool try_wait()
+    {
+        std::unique_lock<decltype(mutex_)> lock(mutex_);
+        if(count_) {
+            --count_;
+            return true;
+        }
+        return false;
     }
 };
 
-#endif
-
-thread_local ThreadStreams TS;
-thread_local std::ostream & fout = TS.get_stream(  );
-#define FOUT fout << ThreadStreams::time().count() << ": "
-
-
+class FrameGraph;
 class ExecNode;
 class ResourceNode;
 using ExecNode_p = std::shared_ptr<ExecNode>;
 using ResourceNode_p = std::shared_ptr<ResourceNode>;
 
+enum class ExecStatus
+{
+    Destroy,
+};
 
+/**
+ * @brief The ExecNode class
+ *
+ * An ExecNode is a node that executes some kind of computation.
+ */
 class ExecNode
 {
 public:
-    std::any     m_NodeClass;
-    std::any     m_NodeData;
-    std::mutex   m_mutex;
-    bool         m_executed = false;
+    std::any     m_NodeClass;                      // an instance of the Node class
+    std::any     m_NodeData;                       // an instance of the node data
+    std::mutex   m_mutex;                          // mutex to prevent the node from executing twice
+    bool         m_executed = false;               // flag to indicate whether the node has been executed.
+    FrameGraph * m_Graph; // the parent graph;
 
-    // a list of required resources
-    std::vector<ResourceNode_p> m_requiredResources;
+    uint32_t     m_resourceCount = 0;
 
-    std::function<void(void)> execute; // excutes' the node's execute() method
+    std::vector<ResourceNode_p> m_requiredResources; // a list of required resources
 
-    uint32_t m_resourceCount = 0;
+    std::function<void(void)> execute; // Function object to execute the Node's () operator.
+
 
     // nudge the ExecNode to check whether all its resources are available.
     // if they are, then tell the FrameGraph to schedule its execution
-    void trigger()
-    {
-        ++m_resourceCount;
-        if( m_resourceCount >= m_requiredResources.size())
-        {
-            execute();
-        }
-    }
+    void trigger();
+
+    bool can_execute() const;
+
 };
 
-
+/**
+ * @brief The ResourceNode class
+ * A resource node is a node which holds a resource and is created or consumed by an ExecNode.
+ *
+ * An ExecNode is executed when all it's required resources have become available.
+ */
 class ResourceNode
 {
 public:
@@ -154,8 +127,20 @@ public:
     std::string             name;
     std::vector<ExecNode_p> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
+    bool m_is_available = false;
 
-    bool is_available = false;
+    void make_available()
+    {
+        m_is_available = true;
+    }
+    bool is_available() const
+    {
+        return m_is_available;
+    }
+    void clear()
+    {
+        m_is_available = false;
+    }
 };
 
 template<typename T>
@@ -168,13 +153,35 @@ public:
         return std::any_cast<T&>(m_node->resource);
     }
 
+    /**
+     * @brief clear
+     * Clears the resource by making it unavailable.
+     * This does not actually delete the
+     */
+    void clear()
+    {
+        m_node->clear();
+    }
+
     void make_available()
     {
-        m_node->is_available = true;
-        for(auto & n : m_node->m_Nodes)
+        if( !m_node->is_available() )
         {
-            n->trigger();
+            m_node->make_available();
+
+            // loop through all the exec nodes which require this resource
+            // and trigger them.
+            for(auto & n : m_node->m_Nodes)
+            {
+                n->trigger();
+            }
         }
+    }
+
+    Resource & operator = ( T const & v)
+    {
+        std::any_cast<T&>(m_node->resource) = this;
+        return *this;
     }
 
     operator T&()
@@ -182,9 +189,11 @@ public:
         return std::any_cast<T&>(m_node->resource);
     }
 
-    void set(T const & x)
+    void set(T const & x, bool make_avail=true)
     {
         std::any_cast<T&>(m_node->resource) = x;
+        if( make_avail) make_available();
+
     }
 };
 
@@ -283,7 +292,8 @@ public:
     ~FrameGraph()
     {
         //std::cout << "Destroying Framegraph " << std::endl;
-
+        quit = true;
+        m_cv.notify_all();
 
     }
 
@@ -330,6 +340,7 @@ public:
           N->m_NodeData  = std::make_any<Data_t>();
 
           ExecNode* rawp = N.get();
+          rawp->m_Graph = this;
           N->execute = [rawp]()
           {
               if( !rawp->m_executed ) // if we haven't executed yet.
@@ -355,35 +366,118 @@ public:
           m_execNodes.push_back(N);
       }
 
-
-    void execute()
+     /**
+     * @brief append_node
+     * @param node
+     *
+     * Append a node to the execution queue. so that it can be executed
+     * when the next thread worker is available.
+     */
+    void append_node( ExecNode * node)
     {
-        std::vector<ExecNode_p> zero_resources;
-        for(auto & N : m_execNodes)
+        m_ToExecute.push(node);
+        m_cv.notify_all();
+    }
+
+    /**
+     * @brief execute_serial
+     *
+     * Executes the graph on a single thread.
+     */
+    void execute_serial()
+    {
+        for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
         {
             if( N->m_requiredResources.size() == 0)
             {
-                zero_resources.push_back(N);
+                m_ToExecute.push(N.get());
             }
         }
 
-        std::vector< std::thread > m_threads;
-        for(auto & N : zero_resources)
+        // execute the all nodes in the queue.
+        // New nodes will be added
+        while( m_ToExecute.size() )
         {
-            m_threads.emplace_back( std::thread(N->execute) );
-        }
-
-        for(auto & t : m_threads)
-        {
-            if( t.joinable()) t.join();
+            m_ToExecute.front()->execute();
+            m_ToExecute.pop();
         }
     }
 
-    std::vector< ExecNode_p > m_execNodes;
+    //==================================================
+    //
+    //==================================================
+    void execute_threaded(int n)
+    {
+
+    }
+    //==================================================
+
+    /**
+     * @brief clear_resources
+     * CLears all the resources to their unavailable state.
+     * This does not destroy the resource.
+     */
+    void clear_resources()
+    {
+        for(auto & r : m_resources)
+        {
+            r.second->clear();
+        }
+    }
+
+    std::vector< ExecNode_p >             m_execNodes;
     std::map<std::string, ResourceNode_p> m_resources;
 
-    std::vector<ExecNode*> m_ToExecute;
+    // queue of all the nodes ready to be launched
+    std::queue<ExecNode*>                 m_ToExecute;
+    bool quit=false;
+
+
+    std::mutex m_mutex;
+    std::condition_variable m_cv;
+
+    void  thread_worker()
+    {
+        while( true )
+        {
+            ExecNode * Job = nullptr;
+            {
+                std::unique_lock<std::mutex> lock(m_mutex);
+
+                m_cv.wait(lock, [this]{return !m_ToExecute.empty(); } );
+                Job = m_ToExecute.front();
+                m_ToExecute.pop();
+            }
+
+            Job->execute(); // function<void()> type
+        }
+
+    }
+
+
+
 
 };
 
+inline void ExecNode::trigger()
+{
+    ++m_resourceCount;
+    if( m_resourceCount >= m_requiredResources.size())
+    {
+        m_Graph->append_node(this);
+    }
+}
+
+bool ExecNode::can_execute() const
+{
+    for(auto & r : m_requiredResources)
+    {
+        if(!r->is_available())
+        {
+            return false;
+        }
+    }
+    return true;
+}
 #endif
+
