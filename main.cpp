@@ -167,9 +167,9 @@ int main(int argc, char **argv)
 
     FrameGraph G;
 
+    G.AddNode<Node2>(); // node added and constructed
     G.AddNode<Node0>(); // node added and constructed
     G.AddNode<Node1>(); // node added and constructed
-    G.AddNode<Node2>(); // node added and constructed
     G.AddNode<Node4>(); // node added and constructed
     G.AddNode<Node3>(); // node added and constructed
 
