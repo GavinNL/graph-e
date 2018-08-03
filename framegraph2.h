@@ -16,7 +16,7 @@
 #include <iomanip>
 
 //#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
-#define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
+//#define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
 
 uint32_t global_count = 0;
 class FrameGraph;
@@ -173,6 +173,7 @@ class ResourceRegistry
             {
                 Resource<T> r;
                 r.m_node = m_resources.at(name);
+                m_Node->m_producedResources.push_back( r.m_node);
                 return r;
             }
         }
@@ -251,7 +252,7 @@ public:
 
           N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
           N->m_NodeData  = std::make_any<Data_t>();
-          N->m_name      = "Node_" + std::to_string(global_count++);
+          N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
           ExecNode* rawp = N.get();
           rawp->m_Graph = this;
           N->execute = [rawp]()
@@ -346,20 +347,28 @@ public:
     {
         std::cout << "digraph G {" << std::endl;
 
-        uint32_t i=0;
+#define MAKE_NAME(E) ("_" + E)
         for(auto & E : m_execNodes)
         {
-            std::cout << "Node_" << i << " [shape=Msquare]" << std::endl;
-            for(auto & R : E->m_producedResources)
-            {
-                std::cout << "   Node_" << i << " -> " << R->m_name << std::endl;
-            }
+            std::cout <<  MAKE_NAME(E->m_name) << " [shape=square]" << std::endl;
+        }
+        for(auto & E : m_resources)
+        {
+            std::cout <<  E.second->m_name << " [shape=circle]" << std::endl;
+        }
+
+        for(auto & E : m_execNodes)
+        {
             for(auto & R : E->m_requiredResources)
             {
-                std::cout << "   " << R->m_name << " -> " << "Node_" << i << std::endl;
+                std::cout << R->m_name << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
             }
-            i++;
+            for(auto & R : E->m_producedResources)
+            {
+                std::cout << MAKE_NAME(E->m_name) << " -> " << R->m_name  << std::endl;
+            }
         }
+
 
         std::cout << "}" << std::endl;
 
