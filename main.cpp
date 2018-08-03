@@ -8,7 +8,42 @@
 #include <string>
 #include <sstream>
 
-#define WAIT std::this_thread::sleep_for(std::chrono::milliseconds(200)); FOUT << "     |     " << std::endl;
+auto global_start = std::chrono::system_clock::now();
+uint32_t global_thread_count=0;
+class ThreadOut
+{
+public:
+    ThreadOut()
+    {
+        std::stringstream S;
+        S << "thread_";
+        S << global_thread_count;
+        thread_number = global_thread_count++;
+        out.open( S.str() );
+    }
+
+    ~ThreadOut()
+    {
+        out.close();
+    }
+    static std::chrono::microseconds time()
+    {
+        return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start);
+    }
+    uint32_t thread_number;
+    std::ofstream out;
+};
+
+//thread_local ThreadOut T;
+//thread_local std::ostream & tout = T.out;
+
+thread_local uint32_t thread_number=global_thread_count++;
+
+thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
+
+#define FOUT tout << std::setw(8) << ThreadOut::time().count() << ": " << std::string( 40*thread_number, ' ')
+//#define FOUT std::cout << std::setw(8) << ThreadOut::time().count() << ": " << std::string( 40*thread_number, ' ')
+#define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
 class Node0
 {
@@ -28,18 +63,15 @@ class Node0
 
     void operator()(Data_t & G)
     {
-     //   FOUT << "Node0 Start" << std::endl;
+        FOUT << "Node0 Start" << std::endl;
 
-      //  WAIT;
-      //  FOUT << "w available!" << std::endl;
-        G.w.set(1); G.w.make_available();
-        WAIT;
-       // FOUT << "x available!" << std::endl;
-        G.x.set(3);
-        G.x.make_available();
-      //  WAIT;
-      //  WAIT;
-//
+        WAIT(1000);
+        G.x.set(1); G.x.make_available();
+
+        WAIT(1000);
+        G.w.set(3);
+        G.w.make_available();
+
         FOUT << "Node0 Ended" << std::endl;
     }
 
@@ -63,10 +95,9 @@ class Node1
 
     void operator()(Data_t & G)
     {
-       // FOUT << "Node1 Start" << std::endl;
+        FOUT << "Node1 Start" << std::endl;
 
-        std::this_thread::sleep_for( std::chrono::milliseconds(750));
-       // FOUT << "y available" << std::endl;
+        WAIT(750);
         G.y.set(2);
         G.y.make_available();
 
@@ -96,9 +127,9 @@ class Node2
 
     void operator()(Data_t & G)
     {
-        //FOUT << "Node2 Start" << std::endl;
+        FOUT << "Node2 Start" << std::endl;
 
-        std::this_thread::sleep_for( std::chrono::milliseconds(250));
+        WAIT(250);
         //FOUT << "  z available: " << 5 << std::endl;
         G.z.set(5);
         G.z.make_available();
@@ -128,8 +159,8 @@ class Node3
 
     void operator()(Data_t & G)
     {
-       // FOUT << "Node3 Start" << std::endl;
-        std::this_thread::sleep_for( std::chrono::milliseconds(500));
+        FOUT << "Node3 Start" << std::endl;
+        WAIT(500);
         FOUT << "Node3 end" << std::endl;
     }
 
@@ -151,8 +182,8 @@ class Node4
 
     void operator()(Data_t & G)
     {
-      //  FOUT << "Node4 started" << std::endl;
-        std::this_thread::sleep_for( std::chrono::milliseconds(250));
+        FOUT << "Node4 started" << std::endl;
+        WAIT(250);
         FOUT << "Node4 ended" << std::endl;
     }
 
@@ -168,6 +199,9 @@ int main(int argc, char **argv)
     FrameGraph G;
 
     G.AddNode<Node2>(); // node added and constructed
+    G.AddNode<Node2>(); // node added and constructed
+    G.AddNode<Node2>(); // node added and constructed
+    G.AddNode<Node2>(); // node added and constructed
     G.AddNode<Node0>(); // node added and constructed
     G.AddNode<Node1>(); // node added and constructed
     G.AddNode<Node4>(); // node added and constructed
@@ -175,18 +209,29 @@ int main(int argc, char **argv)
 
     // Serial Execution: Nodes are executed in a single thread
     // nodes with 0 resource requirements are executed first
-    G.ExecuteSerial();
+    {
+        auto s = std::chrono::system_clock::now();
+        G.ExecuteSerial();
+        auto e = std::chrono::system_clock::now();
 
-    G.Reset(); G.ExecuteSerial();
-    G.Reset(); G.ExecuteSerial();
+        std::cout << "Serial run: " << std::chrono::duration<double>(e-s).count() << std::endl;
+    }
 
 
     // Threaded Execution: Each node is executed as part of a threadpool
     // The threadpool.  This function will block until
     // all nodes have been executed.
-    G.Reset(); G.ExecuteThreaded(5);
-
-
+    G.Reset();
+    {
+        auto s = std::chrono::system_clock::now();
+        {
+            G.ExecuteThreaded(5);
+            G.Wait();
+        }
+        auto e = std::chrono::system_clock::now();
+        std::cout << "Serial run: " << std::chrono::duration<double>(e-s).count() << std::endl;
+    }
+    G.print();
 
     return 0;
 }
