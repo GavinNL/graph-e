@@ -41,6 +41,7 @@ public:
     std::any     m_NodeClass;                      // an instance of the Node class
     std::any     m_NodeData;                       // an instance of the node data
     std::mutex   m_mutex;                          // mutex to prevent the node from executing twice
+    bool         m_scheduled = false;              // has this node been scheduled to run.
     bool         m_executed = false;               // flag to indicate whether the node has been executed.
     FrameGraph * m_Graph; // the parent graph;
 
@@ -487,7 +488,11 @@ inline void ExecNode::trigger()
     ++m_resourceCount;
     if( m_resourceCount >= m_requiredResources.size())
     {
-        m_Graph->append_node(this);
+        if(!m_scheduled)
+        {
+            m_scheduled = true;
+            m_Graph->append_node(this);
+        }
     }
 }
 
