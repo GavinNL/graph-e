@@ -248,35 +248,10 @@ public:
 
     }
 
-    FrameGraph( FrameGraph const & other)
-    {
-        if( this != & other)
-        {
-
-        }
-    }
-
-    FrameGraph( FrameGraph && other)
-    {
-    }
-
-    FrameGraph & operator = ( FrameGraph const & other)
-    {
-        if( this != & other)
-        {
-
-        }
-        return *this;
-    }
-
-    FrameGraph & operator = ( FrameGraph && other)
-    {
-        if( this != & other)
-        {
-
-        }
-        return *this;
-    }
+    FrameGraph( FrameGraph const & other) = delete;
+    FrameGraph( FrameGraph && other) = delete;
+    FrameGraph & operator = ( FrameGraph const & other) = delete;
+    FrameGraph & operator = ( FrameGraph && other) = delete;
 
     template<typename _Tp, typename... _Args>
       inline void
