@@ -69,8 +69,8 @@ public:
 class ResourceNode
 {
 public:
-    std::any                resource;
-    std::string             name;
+    std::any                m_resource;
+    std::string             m_name;
     std::vector<ExecNode_p> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
     bool m_is_available = false;
@@ -96,7 +96,7 @@ public:
     ResourceNode_p m_node;
     T & get()
     {
-        return std::any_cast<T&>(m_node->resource);
+        return std::any_cast<T&>(m_node->m_resource);
     }
 
     /**
@@ -126,18 +126,18 @@ public:
 
     Resource & operator = ( T const & v)
     {
-        std::any_cast<T&>(m_node->resource) = this;
+        get() = this;
         return *this;
     }
 
     operator T&()
     {
-        return std::any_cast<T&>(m_node->resource);
+        return get();
     }
 
     void set(T const & x, bool make_avail=true)
     {
-        std::any_cast<T&>(m_node->resource) = x;
+        get() = x;
         if( make_avail) make_available();
 
     }
@@ -169,8 +169,8 @@ class ResourceRegistry
             if( m_resources.count(name) == 0 )
             {
                 ResourceNode_p RN = std::make_shared< ResourceNode >();
-                RN->resource      = std::make_any<T>();
-                RN->name          = name;
+                RN->m_resource      = std::make_any<T>();
+                RN->m_name          = name;
                 m_Node->m_producedResources.push_back(RN);
                 m_resources[name] = RN;
 
@@ -192,12 +192,10 @@ class ResourceRegistry
         {
             if( m_resources.count(name) == 0 )
             {
-                Resource_p<T> X = std::make_shared< Resource<T> >();
-
                 ResourceNode_p RN = std::make_shared<ResourceNode>();
-                RN->resource      = X;
+                RN->m_resource      = std::make_any<T>();
                 RN->m_Nodes.push_back(m_Node);
-                RN->name = name;
+                RN->m_name = name;
                 m_resources[name] = RN;
 
                 Resource<T> r;
@@ -402,11 +400,11 @@ public:
             std::cout << "Node_" << i << " [shape=Msquare]" << std::endl;
             for(auto & R : E->m_producedResources)
             {
-                std::cout << "   Node_" << i << " -> " << R->name << std::endl;
+                std::cout << "   Node_" << i << " -> " << R->m_name << std::endl;
             }
             for(auto & R : E->m_requiredResources)
             {
-                std::cout << "   " << R->name << " -> " << "Node_" << i << std::endl;
+                std::cout << "   " << R->m_name << " -> " << "Node_" << i << std::endl;
             }
             i++;
         }
