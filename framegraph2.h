@@ -322,7 +322,7 @@ public:
      *
      * Executes the graph on a single thread.
      */
-    void execute_serial()
+    void ExecuteSerial()
     {
         for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
         {
@@ -344,7 +344,7 @@ public:
     //==================================================
     //
     //==================================================
-    void execute_threaded(int n)
+    void ExecuteThreaded(int n)
     {
         if( m_threads.size() == 0)
         {
