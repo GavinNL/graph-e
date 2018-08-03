@@ -23,6 +23,7 @@
 //#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
 #define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
 
+uint32_t global_count = 0;
 class FrameGraph;
 class ExecNode;
 class ResourceNode;
@@ -38,6 +39,7 @@ using ResourceNode_p = std::shared_ptr<ResourceNode>;
 class ExecNode
 {
 public:
+    std::string  m_name;
     std::any     m_NodeClass;                      // an instance of the Node class
     std::any     m_NodeData;                       // an instance of the node data
     std::mutex   m_mutex;                          // mutex to prevent the node from executing twice
@@ -287,7 +289,7 @@ public:
 
           N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
           N->m_NodeData  = std::make_any<Data_t>();
-
+          N->m_name      = "Node_" + std::to_string(global_count++);
           ExecNode* rawp = N.get();
           rawp->m_Graph = this;
           N->execute = [rawp]()
@@ -302,7 +304,7 @@ public:
                       rawp->m_mutex.unlock();
                   }
               } else {
-                  FOUT << "Already Executed." << std::endl;
+                  FOUT << rawp->m_name << " Already Executed." << std::endl;
               }
           };
 
