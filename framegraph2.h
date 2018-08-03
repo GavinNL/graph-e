@@ -371,9 +371,12 @@ public:
     //==================================================
     void execute_threaded(int n)
     {
-        for(int i=0;i<n;i++)
+        if( m_threads.size() == 0)
         {
-            m_threads.emplace_back(  std::thread(&FrameGraph::thread_worker, this));
+            for(int i=0;i<n;i++)
+            {
+                m_threads.emplace_back(  std::thread(&FrameGraph::thread_worker, this));
+            }
         }
         for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
         {
