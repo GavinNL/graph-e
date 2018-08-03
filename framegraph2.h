@@ -242,6 +242,16 @@ public:
 
     }
 
+    void Wait()
+    {
+        m_cv.notify_all();
+
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
+        }
+    }
+
     FrameGraph( FrameGraph const & other) = delete;
     FrameGraph( FrameGraph && other) = delete;
     FrameGraph & operator = ( FrameGraph const & other) = delete;
