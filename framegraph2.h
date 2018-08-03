@@ -15,11 +15,6 @@
 #include <iostream>
 #include <iomanip>
 
-//uint32_t thread_count = 0;
-//thread_local ThreadStreams TS;
-//thread_local std::ostream & fout = TS.get_stream(  );
-//thread_local uint32_t thread_number = thread_count++;
-
 //#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
 #define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
 
@@ -86,9 +81,11 @@ public:
     {
         return m_is_available;
     }
-    void clear()
+
+    template<typename T>
+    T & Get()
     {
-        m_is_available = false;
+        return std::any_cast<T>(m_resource);
     }
 };
 
@@ -100,16 +97,6 @@ public:
     T & get()
     {
         return std::any_cast<T&>(m_node->m_resource);
-    }
-
-    /**
-     * @brief clear
-     * Clears the resource by making it unavailable.
-     * This does not actually delete the
-     */
-    void clear()
-    {
-        m_node->clear();
     }
 
     void make_available()
@@ -279,7 +266,7 @@ public:
                       rawp->m_mutex.unlock();
                   }
               } else {
-                  FOUT << rawp->m_name << " Already Executed." << std::endl;
+
               }
           };
 
@@ -291,28 +278,16 @@ public:
           m_execNodes.push_back(N);
       }
 
-     /**
-     * @brief append_node
-     * @param node
-     *
-     * Append a node to the execution queue. so that it can be executed
-     * when the next thread worker is available.
-     */
-    void append_node( ExecNode * node)
-    {
-        m_ToExecute.push(node);
-        m_cv.notify_all();
 
-    }
 
-    void reset()
+    void Reset()
     {
-        for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
+        for(auto & N : m_execNodes)
         {
             N->m_executed = false;
             N->m_scheduled = false;
         }
-        for(auto & N : m_resources) // place all the nodes with no resource requirements onto the queue.
+        for(auto & N : m_resources)
         {
             N.second->m_is_available = false;
         }
@@ -341,9 +316,7 @@ public:
         }
     }
 
-    //==================================================
-    //
-    //==================================================
+
     void ExecuteThreaded(int n)
     {
         if( m_threads.size() == 0)
@@ -362,25 +335,11 @@ public:
         }
         m_cv.notify_all();
     }
-    //==================================================
 
-    /**
-     * @brief clear_resources
-     * CLears all the resources to their unavailable state.
-     * This does not destroy the resource.
-     */
-    void clear_resources()
-    {
-        for(auto & r : m_resources)
-        {
-            r.second->clear();
-        }
-    }
 
-    template<typename T>
-    T & get_resource(std::string const & name)
+    ResourceNode_p  GetResource(std::string const & name)
     {
-        return std::any_cast<T&>(m_resources.at(name)->m_resource);
+        return m_resources.at(name);
     }
 
     void print()
@@ -421,6 +380,7 @@ public:
     uint32_t num_running = 0;
     uint32_t num_waiting = 0;
 
+private:
     // Note to Self: Condition_varaible.wait( mutex ) will wait until condition_variable.notify_XXX() is called before it attempts to lock the mutex.
     //
     void  thread_worker()
@@ -460,6 +420,21 @@ public:
 
 
 
+    /**
+    * @brief __append_node_to_queue
+    * @param node
+    *
+    * Append a node to the execution queue. so that it can be executed
+    * when the next thread worker is available.
+    */
+   void __append_node_to_queue( ExecNode * node)
+   {
+       m_ToExecute.push(node);
+       m_cv.notify_all();
+
+   }
+
+   friend class ExecNode;
 
 };
 
@@ -471,7 +446,7 @@ inline void ExecNode::trigger()
         if(!m_scheduled)
         {
             m_scheduled = true;
-            m_Graph->append_node(this);
+            m_Graph->__append_node_to_queue(this);
         }
     }
 }
