@@ -387,7 +387,7 @@ public:
     template<typename T>
     T & get_resource(std::string const & name)
     {
-        return std::any_cast<T&>(m_resources.at(name));
+        return std::any_cast<T&>(m_resources.at(name)->m_resource);
     }
 
     void print()
