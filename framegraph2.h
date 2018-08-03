@@ -103,6 +103,7 @@ public:
     uint32_t     m_resourceCount = 0;
 
     std::vector<ResourceNode_p> m_requiredResources; // a list of required resources
+    std::vector<ResourceNode_p> m_producedResources; // a list of required resources
 
     std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
@@ -229,6 +230,7 @@ class ResourceRegistry
                 ResourceNode_p RN = std::make_shared< ResourceNode >();
                 RN->resource      = std::make_any<T>();
                 RN->name          = name;
+                m_Node->m_producedResources.push_back(RN);
                 m_resources[name] = RN;
 
                 Resource<T> r;
@@ -463,6 +465,35 @@ public:
         {
             r.second->clear();
         }
+    }
+
+    template<typename T>
+    T & get_resource(std::string const & name)
+    {
+        return std::any_cast<T&>(m_resources.at(name));
+    }
+
+    void print()
+    {
+        std::cout << "digraph G {" << std::endl;
+
+        uint32_t i=0;
+        for(auto & E : m_execNodes)
+        {
+            std::cout << "Node_" << i << " [shape=Msquare]" << std::endl;
+            for(auto & R : E->m_producedResources)
+            {
+                std::cout << "   Node_" << i << " -> " << R->name << std::endl;
+            }
+            for(auto & R : E->m_requiredResources)
+            {
+                std::cout << "   " << R->name << " -> " << "Node_" << i << std::endl;
+            }
+            i++;
+        }
+
+        std::cout << "}" << std::endl;
+
     }
 
     std::vector< ExecNode_p >             m_execNodes;
