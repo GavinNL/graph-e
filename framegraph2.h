@@ -327,6 +327,18 @@ public:
 
     }
 
+    void reset()
+    {
+        for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
+        {
+            N->m_executed = false;
+            N->m_scheduled = false;
+        }
+        for(auto & N : m_resources) // place all the nodes with no resource requirements onto the queue.
+        {
+            N.second->m_is_available = false;
+        }
+    }
     /**
      * @brief execute_serial
      *
