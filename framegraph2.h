@@ -22,9 +22,10 @@ uint32_t global_count = 0;
 class FrameGraph;
 class ExecNode;
 class ResourceNode;
-using ExecNode_p = std::shared_ptr<ExecNode>;
+using ExecNode_p     = std::shared_ptr<ExecNode>;
 using ResourceNode_p = std::shared_ptr<ResourceNode>;
-
+using ExecNode_w      = std::weak_ptr<ExecNode>;
+using ResourceNode_w  = std::weak_ptr<ResourceNode>;
 
 /**
  * @brief The ExecNode class
@@ -44,8 +45,8 @@ public:
 
     uint32_t     m_resourceCount = 0;
 
-    std::vector<ResourceNode_p> m_requiredResources; // a list of required resources
-    std::vector<ResourceNode_p> m_producedResources; // a list of required resources
+    std::vector<ResourceNode_w> m_requiredResources; // a list of required resources
+    std::vector<ResourceNode_w> m_producedResources; // a list of required resources
 
     std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
@@ -69,7 +70,7 @@ class ResourceNode
 public:
     std::any                m_resource;
     std::string             m_name;
-    std::vector<ExecNode_p> m_Nodes; // list of nodes that must be triggered
+    std::vector<ExecNode_w> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
     bool m_is_available = false;
 
@@ -93,23 +94,28 @@ template<typename T>
 class Resource
 {
 public:
-    ResourceNode_p m_node;
+    ResourceNode_w m_node;
     T & get()
     {
-        return std::any_cast<T&>(m_node->m_resource);
+        return std::any_cast<T&>(m_node.lock()->m_resource);
     }
 
     void make_available()
     {
-        if( !m_node->is_available() )
+        auto node = m_node.lock();
+        if( node )
         {
-            m_node->make_available();
-
-            // loop through all the exec nodes which require this resource
-            // and trigger them.
-            for(auto & n : m_node->m_Nodes)
+            if( !node->is_available() )
             {
-                n->trigger();
+                node->make_available();
+
+                // loop through all the exec nodes which require this resource
+                // and trigger them.
+                for(auto & N : node->m_Nodes)
+                {
+                    if( auto n = N.lock())
+                        n->trigger();
+                }
             }
         }
     }
@@ -139,13 +145,13 @@ using Resource_p = std::shared_ptr< Resource<T> >;
 class ResourceRegistry
 {
     std::map<std::string, ResourceNode_p> & m_resources;
-    std::vector<ResourceNode_p> & m_required_resources;
+    std::vector<ResourceNode_w> & m_required_resources;
     ExecNode_p & m_Node;
 
     public:
         ResourceRegistry( ExecNode_p & node,
                           std::map<std::string, ResourceNode_p> & m,
-                          std::vector<ResourceNode_p> & required_resources) :
+                          std::vector<ResourceNode_w> & required_resources) :
             m_Node(node),
             m_resources(m),
             m_required_resources(required_resources)
@@ -250,6 +256,7 @@ public:
 
           ExecNode_p N   = std::make_shared<ExecNode>();
 
+
           N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
           N->m_NodeData  = std::make_any<Data_t>();
           N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
@@ -277,6 +284,7 @@ public:
           std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
 
           m_execNodes.push_back(N);
+
       }
 
 
@@ -359,19 +367,32 @@ public:
 
         for(auto & E : m_execNodes)
         {
-            for(auto & R : E->m_requiredResources)
+            for(auto & r : E->m_requiredResources)
             {
-                std::cout << R->m_name << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
+
+                if(auto R=r.lock() ) std::cout << R->m_name << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
             }
-            for(auto & R : E->m_producedResources)
+            for(auto & r : E->m_producedResources)
             {
-                std::cout << MAKE_NAME(E->m_name) << " -> " << R->m_name  << std::endl;
+                if(auto R=r.lock() ) std::cout << MAKE_NAME(E->m_name) << " -> " << R->m_name  << std::endl;
             }
         }
 
 
         std::cout << "}" << std::endl;
 
+        for(auto & E : m_execNodes)
+        {
+            auto name = E->m_name;
+            auto count = E.use_count();
+            std::cout <<  MAKE_NAME(name) << " use count: " << count << std::endl;
+        }
+        for(auto & E : m_resources)
+        {
+            auto name = E.first;
+            auto count = E.second.use_count();
+            std::cout <<  name << " use count: " << count << std::endl;
+        }
     }
 
     std::vector< ExecNode_p >             m_execNodes;
@@ -462,10 +483,16 @@ inline void ExecNode::trigger()
 
 bool ExecNode::can_execute() const
 {
-    for(auto & r : m_requiredResources)
+    for(auto & R : m_requiredResources)
     {
-        if(!r->is_available())
+        auto r = R.lock();
+        if( r )
         {
+            if( !r->is_available() )
+            {
+                return false;
+            }
+        } else {
             return false;
         }
     }
