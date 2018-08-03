@@ -15,15 +15,13 @@
 #include <iostream>
 #include <iomanip>
 
-#include "threadstreams.h"
+//uint32_t thread_count = 0;
+//thread_local ThreadStreams TS;
+//thread_local std::ostream & fout = TS.get_stream(  );
+//thread_local uint32_t thread_number = thread_count++;
 
-uint32_t thread_count = 0;
-thread_local ThreadStreams TS;
-thread_local std::ostream & fout = TS.get_stream(  );
-thread_local uint32_t thread_number = thread_count++;
-
-#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
-//#define FOUT std::cout << ThreadStreams::time().count() << ": " << std::this_thread::get_id() << ": "
+//#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
+#define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
 
 class FrameGraph;
 class ExecNode;
