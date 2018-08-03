@@ -9,71 +9,21 @@
 #include <vector>
 #include <queue>
 #include <any>
-
 #include <iostream>
+
+#include <sstream>
+#include <iostream>
+#include <iomanip>
 
 #include "threadstreams.h"
 
+uint32_t thread_count = 0;
 thread_local ThreadStreams TS;
 thread_local std::ostream & fout = TS.get_stream(  );
+thread_local uint32_t thread_number = thread_count++;
 
-//#define FOUT fout << ThreadStreams::time().count() << ": "
-#define FOUT std::cout << ThreadStreams::time().count() << ": " << std::this_thread::get_id() << ": "
-class barrier
-{
-private:
-    std::mutex mutex_;
-    std::condition_variable condition_;
-    unsigned long count_ = 0; // Initialized as locked.
-    int id=0;
-public:
-    barrier()
-    {
-        static int i=1;
-        id = i++;
-    }
-
-    void notify_one()
-    {
-        //std::cout << "Notifying " << id << std::endl;
-        std::unique_lock<decltype(mutex_)> lock(mutex_);
-        ++count_;
-        condition_.notify_all();
-    }
-
-    void notify_all()
-    {
-        ++count_;
-        condition_.notify_all();
-    }
-
-    void wait()
-    {
-        {
-            //std::cout << std::this_thread::get_id() << "  Waiting " << id << std::endl;
-            std::unique_lock<decltype(mutex_)> lock(mutex_);
-
-            while( count_ == 0) // Handle spurious wake-ups.
-            {
-                condition_.wait( lock );
-            }
-
-            //std::cout << std::this_thread::get_id() << "  Woken up " << id << std::endl;
-            --count_;
-        }
-        notify_all();
-    }
-
-    bool try_wait()
-    {
-        std::unique_lock<decltype(mutex_)> lock(mutex_);
-        if(count_) {
-            --count_;
-            return true;
-        }
-        return false;
-    }
-};
+#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
+//#define FOUT std::cout << ThreadStreams::time().count() << ": " << std::this_thread::get_id() << ": "
 
 class FrameGraph;
 class ExecNode;
@@ -81,10 +31,6 @@ class ResourceNode;
 using ExecNode_p = std::shared_ptr<ExecNode>;
 using ResourceNode_p = std::shared_ptr<ResourceNode>;
 
-enum class ExecStatus
-{
-    Destroy,
-};
 
 /**
  * @brief The ExecNode class
@@ -222,11 +168,8 @@ class ResourceRegistry
         template<typename T>
         Resource<T> create_PromiseResource(const std::string & name)
         {
-            //std::cout << "Creating Promise: " << name <<std::endl;
             if( m_resources.count(name) == 0 )
             {
-                //std::cout << "  " << name << " not created. Creating now" << std::endl;
-
                 ResourceNode_p RN = std::make_shared< ResourceNode >();
                 RN->resource      = std::make_any<T>();
                 RN->name          = name;
@@ -240,8 +183,6 @@ class ResourceRegistry
             }
             else
             {
-                //std::cout << "  " << name << " already created." << std::endl;
-
                 Resource<T> r;
                 r.m_node = m_resources.at(name);
                 return r;
@@ -251,10 +192,8 @@ class ResourceRegistry
         template<typename T>
         Resource<T> create_FutureResource(const std::string & name)
         {
-            //std::cout << "Creating Future: " << name <<std::endl;
             if( m_resources.count(name) == 0 )
             {
-                //std::cout << "  " << name << " not created. Creating now" << std::endl;
                 Resource_p<T> X = std::make_shared< Resource<T> >();
 
                 ResourceNode_p RN = std::make_shared<ResourceNode>();
@@ -272,8 +211,6 @@ class ResourceRegistry
             }
             else
             {
-                //std::cout << "  " << name << " already created." << std::endl;
-
                 ResourceNode_p RN = m_resources[name];
                 RN->m_Nodes.push_back(m_Node);
 
@@ -294,34 +231,20 @@ public:
     FrameGraph() {}
     ~FrameGraph()
     {
-        //std::this_thread::sleep_for( std::chrono::seconds(4));
-        std::cout << "Destroying Framegraph " << std::endl;
-
         m_cv.notify_all();
-
-        //while(m_ToExecute.size() )
-        //{
-        //    FOUT << "Main: Notifying all" << std::endl;
-        //    m_cv.notify_all();
-        //}
 
         {
             std::unique_lock<std::mutex> lock(m_mutex);
-            //m_cv.wait(lock, [this]{return !m_ToExecute.empty(); } ); // keep waiting if the queue is empty.
-
-            FOUT << "=========Main: Waiting for threads to finish" << std::endl;
             m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
-            FOUT << "=========Main: Number of waiting threads: " << num_waiting << std::endl;
-
             quit = true;
         }
-        FOUT << "=========Main: Mutex Unlocked: " << num_waiting << std::endl;
         m_cv.notify_all();
-        FOUT << "=========Main: Notifying all: " << num_waiting << std::endl;
-
         for(auto & t : m_threads)
         {
-            if(t.joinable()) t.join();
+            if(t.joinable())
+            {
+                t.join();
+            }
         }
 
     }
@@ -374,13 +297,12 @@ public:
           {
               if( !rawp->m_executed ) // if we haven't executed yet.
               {
+
                   if( rawp->m_mutex.try_lock() ) // try to lock the mutex
                   {                              // if we have acquired the lock, execute the node
                       rawp->m_executed = true;
                       std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
                       rawp->m_mutex.unlock();
-                  } else { // othersise skip the node
-                      FOUT << "Locked. Already executing" << std::endl;
                   }
               } else {
                   FOUT << "Already Executed." << std::endl;
@@ -405,7 +327,6 @@ public:
     void append_node( ExecNode * node)
     {
         m_ToExecute.push(node);
-        //FOUT << "======NOTIFYING=========" << std::endl;
         m_cv.notify_all();
 
     }
@@ -521,12 +442,10 @@ public:
             {
                 std::unique_lock<std::mutex> lock(m_mutex);
 
-                FOUT << "Waiting on Lock: " << num_running << std::endl;
                 num_waiting++;
                 m_cv.wait(lock, [this]{return !m_ToExecute.empty() || quit; } ); // keep waiting if the queue is empty.
-                //m_cv.wait(lock, [this]{return  m_ToExecute.empty(); } ); // Do not wait if queue is empty or.
                 num_waiting--;
-                FOUT << "Woken up : Running: " << num_running << "   waiting: " << num_waiting << std::endl;
+
                 if(quit)
                 {
                     break;
@@ -540,12 +459,12 @@ public:
             }
 
             ++num_running;
-            Job->execute(); // function<void()> type
+            Job->execute();
             --num_running;
-            FOUT << "Finished executing: Running: " << num_running << "   waiting: " << num_waiting << std::endl;
+
             m_cv.notify_all();
         }
-        FOUT << "Worker Exiting: " << std::this_thread::get_id() << std::endl;
+
         m_cv.notify_all();
 
     }
