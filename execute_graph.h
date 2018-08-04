@@ -13,11 +13,7 @@
 #include <any>
 #include <iostream>
 
-#include <sstream>
-#include <iostream>
-#include <iomanip>
 
-#include "semaphore.h"
 
 class execution_graph_base;
 class exec_node;
@@ -74,17 +70,21 @@ public:
  */
 class resource_node
 {
-public:
-    std::any                m_resource;
-    std::string             m_name;
+protected:
+    friend class ResourceRegistry;
+
+    std::any                 m_resource;
+    std::string              m_name;
     std::vector<exec_node_w> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
     bool m_is_available = false;
 
-    void make_available()
+public:
+    void make_available(bool av = true)
     {
-        m_is_available = true;
+        m_is_available = av;
     }
+
     bool is_available() const
     {
         return m_is_available;
@@ -93,7 +93,21 @@ public:
     template<typename T>
     T & Get()
     {
-        return std::any_cast<T>(m_resource);
+        return std::any_cast<T&>(m_resource);
+    }
+
+    std::string const & get_name() const
+    {
+        return m_name;
+    }
+
+    void notify_dependents()
+    {
+        for(auto & N : m_Nodes)
+        {
+            if( auto n = N.lock())
+                n->trigger();
+        }
     }
 };
 
@@ -104,7 +118,7 @@ public:
     resource_node_w m_node;
     T & get()
     {
-        return std::any_cast<T&>(m_node.lock()->m_resource);
+        return m_node.lock()->Get<T>();//std::any_cast<T&>( m_node.lock()->m_resource );
     }
 
     void make_available()
@@ -115,14 +129,7 @@ public:
             if( !node->is_available() )
             {
                 node->make_available();
-
-                // loop through all the exec nodes which require this resource
-                // and trigger them.
-                for(auto & N : node->m_Nodes)
-                {
-                    if( auto n = N.lock())
-                        n->trigger();
-                }
+                node->notify_dependents();
             }
         }
     }
@@ -307,7 +314,7 @@ public:
         }
         for(auto & N : m_resources)
         {
-            N.second->m_is_available = false;
+            N.second->make_available(false);
         }
     }
 
@@ -336,7 +343,7 @@ public:
         }
         for(auto & E : m_resources)
         {
-            std::cout <<  E.second->m_name << " [shape=circle]" << std::endl;
+            std::cout <<  E.second->get_name() << " [shape=circle]" << std::endl;
         }
 
         for(auto & E : m_exec_nodes)
@@ -344,11 +351,11 @@ public:
             for(auto & r : E->m_requiredResources)
             {
 
-                if(auto R=r.lock() ) std::cout << R->m_name << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
+                if(auto R=r.lock() ) std::cout << R->get_name() << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
             }
             for(auto & r : E->m_producedResources)
             {
-                if(auto R=r.lock() ) std::cout << MAKE_NAME(E->m_name) << " -> " << R->m_name  << std::endl;
+                if(auto R=r.lock() ) std::cout << MAKE_NAME(E->m_name) << " -> " << R->get_name()  << std::endl;
             }
         }
 
