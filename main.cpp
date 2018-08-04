@@ -1,6 +1,7 @@
 #if 1
 
 #include "framegraph2.h"
+#include "barrier.h"
 
 #include <memory>
 #include <iostream>
@@ -22,7 +23,7 @@ thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
 
 //#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
 #define FOUT std::cout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
-#define WAIT(ms)// std::this_thread::sleep_for(std::chrono::milliseconds(ms))
+#define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
 class Node0
 {
@@ -201,7 +202,7 @@ int main(int argc, char **argv)
     {
         auto s = std::chrono::system_clock::now();
         {
-            G.ExecuteThreaded(5);
+            G.ExecuteThreaded(3);
             G.Wait();
         }
         auto e = std::chrono::system_clock::now();
