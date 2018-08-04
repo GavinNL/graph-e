@@ -197,7 +197,7 @@ int main(int argc, char **argv)
 
     execution_graph_base_thread_pool<ThreadPoolWrapper> G;
 
-    G.SetThreadPool(&TW);
+    G.set_thread_pool(&TW);
 #else
     FrameGraphSerial G;
 #endif
@@ -210,12 +210,12 @@ int main(int argc, char **argv)
 
     G.print_info();
 
-    G.Execute();
+    G.execute();
 
     G.print_info();
 
 #if defined USE_THREAD_POOL
-    G.Wait();
+    G.wait();
 #endif
 
     G.print();

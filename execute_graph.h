@@ -447,6 +447,7 @@ public:
         }
     }
 
+protected:
     virtual void __schedule_node_for_execution( exec_node * node) override
     {
         m_ToExecute.push(node);
@@ -463,23 +464,23 @@ template<typename ThreadPool_t>
 class execution_graph_base_thread_pool : public execution_graph_base
 {
 public:
-    void SetThreadPool(ThreadPool_t * T)
+    void set_thread_pool(ThreadPool_t * T)
     {
         m_thread_pool = T;
     }
 
-    ThreadPool_t * GetThreadPool() const
+    ThreadPool_t * get_thread_pool() const
     {
         return m_thread_pool;
     }
     ~execution_graph_base_thread_pool()
     {
         std::cout << "execution_graph_base_thread_pool::Destructor!" << std::endl;
-        Wait();
+        wait();
         std::cout << "Waiting for threads to exit!" << std::endl;
     }
 
-    void Wait()
+    void wait()
     {
         while( m_numRunning > 0 || m_numToExecute > 0)
         {
@@ -487,7 +488,7 @@ public:
         }
     }
 
-    void Execute()
+    void execute()
     {
         for(auto & N : m_exec_nodes) // place all the nodes with no resource requirements onto the queue.
         {
@@ -497,7 +498,7 @@ public:
             }
         }
     }
-
+protected:
     virtual void __schedule_node_for_execution( exec_node * node) override
     {
         m_thread_pool->operator()(node->execute);
