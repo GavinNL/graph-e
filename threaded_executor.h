@@ -3,7 +3,7 @@
 #ifndef THREAD_POOL_EXECUTE_GRAPH_3_H
 #define THREAD_POOL_EXECUTE_GRAPH_3_H
 
-#include "execute_graph.h"
+#include "node_graph.h"
 
 template<typename ThreadPool_t>
 class thread_execute

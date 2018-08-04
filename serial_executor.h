@@ -3,7 +3,7 @@
 #ifndef SERIAL_EXECUTE_GRAPH_3_H
 #define SERIAL_EXECUTE_GRAPH_3_H
 
-#include "execute_graph.h"
+#include "node_graph.h"
 
 
 class serial_execute
