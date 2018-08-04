@@ -203,11 +203,11 @@ int main(int argc, char **argv)
     serial_execution_graph G;
 #endif
 
-    G.add_node<Node2>(); // node added and constructed
-    G.add_node<Node0>(); // node added and constructed
-    G.add_node<Node1>(); // node added and constructed
-    G.add_node<Node4>(); // node added and constructed
-    G.add_node<Node3>(); // node added and constructed
+    G.add_node<Node2>().set_name("Node_2"); // node added and constructed
+    G.add_node<Node0>().set_name("Node_0"); // node added and constructed
+    G.add_node<Node1>().set_name("Node_1"); // node added and constructed
+    G.add_node<Node4>().set_name("Node_4"); // node added and constructed
+    G.add_node<Node3>().set_name("Node_3"); // node added and constructed
 
     G.print_info();
 

@@ -66,6 +66,14 @@ public:
      */
     bool can_execute() const;
 
+    const std::string & get_name() const
+    {
+        return m_name;
+    }
+
+    void set_name(const std::string & name) {
+        m_name = name;
+    }
 };
 
 /**
@@ -263,7 +271,7 @@ public:
      * named Data_t.
      */
     template<typename _Tp, typename... _Args>
-    inline void add_node(_Args&&... __args)
+    inline exec_node & add_node(_Args&&... __args)
     {
       typedef typename std::remove_const<_Tp>::type Node_t;
       typedef typename Node_t::Data_t               Data_t;
@@ -300,6 +308,7 @@ public:
 
       m_exec_nodes.push_back(N);
 
+      return *N;
     }
 
 
@@ -344,7 +353,7 @@ public:
     {
         std::cout << "digraph G {" << std::endl;
 
-#define MAKE_NAME(E) ("_" + E)
+#define MAKE_NAME(E) E
         for(auto & E : m_exec_nodes)
         {
             std::cout <<  MAKE_NAME(E->m_name) << " [shape=square]" << std::endl;
