@@ -202,17 +202,17 @@ int main(int argc, char **argv)
     FrameGraphSerial G;
 #endif
 
-    G.AddNode<Node2>(); // node added and constructed
-    G.AddNode<Node0>(); // node added and constructed
-    G.AddNode<Node1>(); // node added and constructed
-    G.AddNode<Node4>(); // node added and constructed
-    G.AddNode<Node3>(); // node added and constructed
+    G.add_node<Node2>(); // node added and constructed
+    G.add_node<Node0>(); // node added and constructed
+    G.add_node<Node1>(); // node added and constructed
+    G.add_node<Node4>(); // node added and constructed
+    G.add_node<Node3>(); // node added and constructed
 
-    G.PrintInfo();
+    G.print_info();
 
     G.Execute();
 
-    G.PrintInfo();
+    G.print_info();
 
 #if defined USE_THREAD_POOL
     G.Wait();

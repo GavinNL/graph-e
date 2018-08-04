@@ -261,7 +261,7 @@ public:
      * named Data_t.
      */
     template<typename _Tp, typename... _Args>
-    inline void AddNode(_Args&&... __args)
+    inline void add_node(_Args&&... __args)
     {
       typedef typename std::remove_const<_Tp>::type Node_t;
       typedef typename Node_t::Data_t               Data_t;
@@ -301,7 +301,7 @@ public:
     }
 
 
-    void ScheduleNode( exec_node * p)
+    void schedule_node( exec_node * p)
     {
         ++m_numToExecute;
         __schedule_node_for_execution(p);
@@ -311,7 +311,7 @@ public:
      * @brief Reset
      * @param destroy_resources - destroys all the resources as well. Default is false.
      */
-    void Reset(bool destroy_resources = false)
+    void reset(bool destroy_resources = false)
     {
         for(auto & N : m_exec_nodes)
         {
@@ -325,12 +325,12 @@ public:
     }
 
 
-    resource_node_p  GetResource(std::string const & name)
+    resource_node_p  get_resources(std::string const & name)
     {
         return m_resources.at(name);
     }
 
-    void PrintInfo()
+    void print_info()
     {
         std::cout << "Num Nodes: " << m_exec_nodes.size() << std::endl;
         std::cout << "Num Resources: " << m_resources.size() << std::endl;
@@ -401,7 +401,7 @@ inline void exec_node::trigger()
         if(!m_scheduled)
         {
             m_scheduled = true;
-            m_Graph->ScheduleNode(this);
+            m_Graph->schedule_node(this);
         }
     }
 }
@@ -493,7 +493,7 @@ public:
         {
             if( N->can_execute() )
             {
-                ScheduleNode( N.get() );
+                schedule_node( N.get() );
             }
         }
     }
