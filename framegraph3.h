@@ -19,20 +19,20 @@
 
 #include "semaphore.h"
 
-class FrameGraphBase;
-class ExecNode;
-class ResourceNode;
-using ExecNode_p     = std::shared_ptr<ExecNode>;
-using ResourceNode_p = std::shared_ptr<ResourceNode>;
-using ExecNode_w      = std::weak_ptr<ExecNode>;
-using ResourceNode_w  = std::weak_ptr<ResourceNode>;
+class execution_graph_base;
+class exec_node;
+class resource_node;
+using exec_node_p     = std::shared_ptr<exec_node>;
+using resource_node_p = std::shared_ptr<resource_node>;
+using exec_node_w      = std::weak_ptr<exec_node>;
+using resource_node_w  = std::weak_ptr<resource_node>;
 
 /**
- * @brief The ExecNode class
+ * @brief The exec_node class
  *
- * An ExecNode is a node that executes some kind of computation.
+ * An exec_node is a node that executes some kind of computation.
  */
-class ExecNode
+class exec_node
 {
 public:
     std::string  m_name;
@@ -41,18 +41,18 @@ public:
     std::mutex   m_mutex;                          // mutex to prevent the node from executing twice
     bool         m_scheduled = false;              // has this node been scheduled to run.
     bool         m_executed = false;               // flag to indicate whether the node has been executed.
-    FrameGraphBase * m_Graph; // the parent graph;
+    execution_graph_base * m_Graph; // the parent graph;
 
     uint32_t     m_resourceCount = 0;
 
-    std::vector<ResourceNode_w> m_requiredResources; // a list of required resources
-    std::vector<ResourceNode_w> m_producedResources; // a list of required resources
+    std::vector<resource_node_w> m_requiredResources; // a list of required resources
+    std::vector<resource_node_w> m_producedResources; // a list of required resources
 
     std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
 
-    // nudge the ExecNode to check whether all its resources are available.
-    // if they are, then tell the FrameGraphBase to schedule its execution
+    // nudge the exec_node to check whether all its resources are available.
+    // if they are, then tell the execution_graph_base to schedule its execution
     void trigger();
 
     /**
@@ -67,17 +67,17 @@ public:
 };
 
 /**
- * @brief The ResourceNode class
- * A resource node is a node which holds a resource and is created or consumed by an ExecNode.
+ * @brief The resource_node class
+ * A resource node is a node which holds a resource and is created or consumed by an exec_node.
  *
- * An ExecNode is executed when all it's required resources have become available.
+ * An exec_node is executed when all it's required resources have become available.
  */
-class ResourceNode
+class resource_node
 {
 public:
     std::any                m_resource;
     std::string             m_name;
-    std::vector<ExecNode_w> m_Nodes; // list of nodes that must be triggered
+    std::vector<exec_node_w> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
     bool m_is_available = false;
 
@@ -101,7 +101,7 @@ template<typename T>
 class Resource
 {
 public:
-    ResourceNode_w m_node;
+    resource_node_w m_node;
     T & get()
     {
         return std::any_cast<T&>(m_node.lock()->m_resource);
@@ -151,14 +151,14 @@ using Resource_p = std::shared_ptr< Resource<T> >;
 
 class ResourceRegistry
 {
-    std::map<std::string, ResourceNode_p> & m_resources;
-    std::vector<ResourceNode_w> & m_required_resources;
-    ExecNode_p & m_Node;
+    std::map<std::string, resource_node_p> & m_resources;
+    std::vector<resource_node_w> & m_required_resources;
+    exec_node_p & m_Node;
 
     public:
-        ResourceRegistry( ExecNode_p & node,
-                          std::map<std::string, ResourceNode_p> & m,
-                          std::vector<ResourceNode_w> & required_resources) :
+        ResourceRegistry( exec_node_p & node,
+                          std::map<std::string, resource_node_p> & m,
+                          std::vector<resource_node_w> & required_resources) :
             m_Node(node),
             m_resources(m),
             m_required_resources(required_resources)
@@ -171,7 +171,7 @@ class ResourceRegistry
         {
             if( m_resources.count(name) == 0 )
             {
-                ResourceNode_p RN = std::make_shared< ResourceNode >();
+                resource_node_p RN = std::make_shared< resource_node >();
                 RN->m_resource      = std::make_any<T>();
                 RN->m_name          = name;
                 m_Node->m_producedResources.push_back(RN);
@@ -196,7 +196,7 @@ class ResourceRegistry
         {
             if( m_resources.count(name) == 0 )
             {
-                ResourceNode_p RN = std::make_shared<ResourceNode>();
+                resource_node_p RN = std::make_shared<resource_node>();
                 RN->m_resource      = std::make_any<T>();
                 RN->m_Nodes.push_back(m_Node);
                 RN->m_name = name;
@@ -211,7 +211,7 @@ class ResourceRegistry
             }
             else
             {
-                ResourceNode_p RN = m_resources[name];
+                resource_node_p RN = m_resources[name];
                 RN->m_Nodes.push_back(m_Node);
 
                 Resource<T> r;
@@ -226,18 +226,18 @@ class ResourceRegistry
 
 
 
-class FrameGraphBase
+class execution_graph_base
 {
 public:
-    FrameGraphBase() {}
-    ~FrameGraphBase()
+    execution_graph_base() {}
+    ~execution_graph_base()
     {
     }
 
-    FrameGraphBase( FrameGraphBase const & other) = delete;
-    FrameGraphBase( FrameGraphBase && other) = delete;
-    FrameGraphBase & operator = ( FrameGraphBase const & other) = delete;
-    FrameGraphBase & operator = ( FrameGraphBase && other) = delete;
+    execution_graph_base( execution_graph_base const & other) = delete;
+    execution_graph_base( execution_graph_base && other) = delete;
+    execution_graph_base & operator = ( execution_graph_base const & other) = delete;
+    execution_graph_base & operator = ( execution_graph_base && other) = delete;
 
 
     /**
@@ -253,13 +253,13 @@ public:
       typedef typename std::remove_const<_Tp>::type Node_t;
       typedef typename Node_t::Data_t               Data_t;
 
-      ExecNode_p N   = std::make_shared<ExecNode>();
+      exec_node_p N   = std::make_shared<exec_node>();
 
 
       N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
       N->m_NodeData  = std::make_any<Data_t>();
       N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
-      ExecNode* rawp = N.get();
+      exec_node* rawp = N.get();
       rawp->m_Graph  = this;
 
       // Create the functor which will execute the
@@ -283,12 +283,12 @@ public:
 
       std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
 
-      m_execNodes.push_back(N);
+      m_exec_nodes.push_back(N);
 
     }
 
 
-    void ScheduleNode( ExecNode * p)
+    void ScheduleNode( exec_node * p)
     {
         ++m_numToExecute;
         __schedule_node_for_execution(p);
@@ -300,7 +300,7 @@ public:
      */
     void Reset(bool destroy_resources = false)
     {
-        for(auto & N : m_execNodes)
+        for(auto & N : m_exec_nodes)
         {
             N->m_executed = false;
             N->m_scheduled = false;
@@ -312,14 +312,14 @@ public:
     }
 
 
-    ResourceNode_p  GetResource(std::string const & name)
+    resource_node_p  GetResource(std::string const & name)
     {
         return m_resources.at(name);
     }
 
     void PrintInfo()
     {
-        std::cout << "Num Nodes: " << m_execNodes.size() << std::endl;
+        std::cout << "Num Nodes: " << m_exec_nodes.size() << std::endl;
         std::cout << "Num Resources: " << m_resources.size() << std::endl;
         std::cout << "Num Running: " << m_numRunning << std::endl;
         std::cout << "Num To Executing: " << m_numToExecute << std::endl;
@@ -330,7 +330,7 @@ public:
         std::cout << "digraph G {" << std::endl;
 
 #define MAKE_NAME(E) ("_" + E)
-        for(auto & E : m_execNodes)
+        for(auto & E : m_exec_nodes)
         {
             std::cout <<  MAKE_NAME(E->m_name) << " [shape=square]" << std::endl;
         }
@@ -339,7 +339,7 @@ public:
             std::cout <<  E.second->m_name << " [shape=circle]" << std::endl;
         }
 
-        for(auto & E : m_execNodes)
+        for(auto & E : m_exec_nodes)
         {
             for(auto & r : E->m_requiredResources)
             {
@@ -360,8 +360,8 @@ public:
 
 protected:
 
-    std::vector< ExecNode_p >             m_execNodes;
-    std::map<std::string, ResourceNode_p> m_resources;
+    std::vector< exec_node_p >             m_exec_nodes;
+    std::map<std::string, resource_node_p> m_resources;
 
     uint32_t m_numRunning   = 0;
     uint32_t m_numToExecute = 0;
@@ -373,14 +373,14 @@ protected:
     * Append a node to the execution queue. so that it can be executed
     * when the next thread worker is available.
     */
-   virtual void __schedule_node_for_execution( ExecNode * node) = 0;
+   virtual void __schedule_node_for_execution( exec_node * node) = 0;
 
 
-   friend class ExecNode;
+   friend class exec_node;
 
 };
 
-inline void ExecNode::trigger()
+inline void exec_node::trigger()
 {
     ++m_resourceCount;
     if( m_resourceCount >= m_requiredResources.size())
@@ -393,7 +393,7 @@ inline void ExecNode::trigger()
     }
 }
 
-bool ExecNode::can_execute() const
+bool exec_node::can_execute() const
 {
     for(auto & R : m_requiredResources)
     {
@@ -412,13 +412,13 @@ bool ExecNode::can_execute() const
 }
 
 
-class FrameGraphSerial : public FrameGraphBase
+class execution_graph_serial : public execution_graph_base
 {
 public:
 
     void execute()
     {
-        for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
+        for(auto & N : m_exec_nodes) // place all the nodes with no resource requirements onto the queue.
         {
             if( N->can_execute() )
             {
@@ -434,20 +434,20 @@ public:
         }
     }
 
-    virtual void __schedule_node_for_execution( ExecNode * node) override
+    virtual void __schedule_node_for_execution( exec_node * node) override
     {
         m_ToExecute.push(node);
     }
 
 
 
-    std::queue<ExecNode*>                 m_ToExecute;
+    std::queue<exec_node*>                 m_ToExecute;
 
 };
 
 
 template<typename ThreadPool_t>
-class FrameGraphThreadPool : public FrameGraphBase
+class execution_graph_base_thread_pool : public execution_graph_base
 {
 public:
     void SetThreadPool(ThreadPool_t * T)
@@ -459,9 +459,9 @@ public:
     {
         return m_thread_pool;
     }
-    ~FrameGraphThreadPool()
+    ~execution_graph_base_thread_pool()
     {
-        std::cout << "FrameGraphThreadPool::Destructor!" << std::endl;
+        std::cout << "execution_graph_base_thread_pool::Destructor!" << std::endl;
         Wait();
         std::cout << "Waiting for threads to exit!" << std::endl;
     }
@@ -476,7 +476,7 @@ public:
 
     void Execute()
     {
-        for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
+        for(auto & N : m_exec_nodes) // place all the nodes with no resource requirements onto the queue.
         {
             if( N->can_execute() )
             {
@@ -485,7 +485,7 @@ public:
         }
     }
 
-    virtual void __schedule_node_for_execution( ExecNode * node) override
+    virtual void __schedule_node_for_execution( exec_node * node) override
     {
         m_thread_pool->operator()(node->execute);
     }
