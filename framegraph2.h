@@ -1,4 +1,6 @@
+
 #pragma once
+
 #ifndef FRAME_GRAPH_2_H
 #define FRAME_GRAPH_2_H
 
@@ -15,6 +17,7 @@
 #include <iostream>
 #include <iomanip>
 
+#include "semaphore.h"
 
 class FrameGraph;
 class ExecNode;
@@ -221,34 +224,29 @@ public:
     FrameGraph() {}
     ~FrameGraph()
     {
-        m_cv.notify_all();
+        std::cout << "FrameGraph::Destructor!" << std::endl;
 
+        Wait();
+
+        m_quit = true;
+        m_semaphore.notify();
+        Wait();
+        std::cout << "Waiting for threads to exit!" << std::endl;
+        while( m_threads.size() )
         {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
-            m_quit = true;
+            m_threads.back().join();
+            m_threads.pop_back();
         }
-        m_cv.notify_all();
-
-        // wait for all the threads to finish
-        for(auto & t : m_threads)
-        {
-            if(t.joinable())
-            {
-                t.join();
-            }
-        }
-
     }
 
     void Wait()
     {
-        m_cv.notify_all();
-
+        std::cout << "WAITING : " << num_running << std::endl;
+        while( num_running > 0 || m_ToExecute.size() > 0)
         {
-            std::unique_lock<std::mutex> lock(m_mutex);
-            m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
+            std::this_thread::sleep_for( std::chrono::microseconds(500));
         }
+        std::cout << "Finished waiting : " << num_running << std::endl;
     }
 
     FrameGraph( FrameGraph const & other) = delete;
@@ -329,7 +327,7 @@ public:
     {
         for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
         {
-            if( N->m_requiredResources.size() == 0)
+            if( N->can_execute() )
             {
                 m_ToExecute.push(N.get());
             }
@@ -356,12 +354,12 @@ public:
         }
         for(auto & N : m_execNodes) // place all the nodes with no resource requirements onto the queue.
         {
-            if( N->m_requiredResources.size() == 0)
+            if( N->can_execute() )
             {
                 m_ToExecute.push(N.get());
             }
         }
-        m_cv.notify_all();
+        m_semaphore.notify();
     }
 
 
@@ -422,11 +420,11 @@ public:
     std::vector< std::thread >            m_threads;
 
     bool                                  m_quit = false;
-    std::mutex                            m_mutex;
-    std::condition_variable               m_cv;
+
+    semaphore                             m_semaphore;
+
 
     uint32_t num_running = 0;
-    uint32_t num_waiting = 0;
 
 private:
     // Note to Self: Condition_varaible.wait( mutex ) will wait until condition_variable.notify_XXX() is called before it attempts to lock the mutex.
@@ -435,35 +433,25 @@ private:
     {
         while( true )
         {
-            ExecNode * Job = nullptr;
+            m_semaphore.wait();
+
+            if(m_quit)
             {
-                std::unique_lock<std::mutex> lock(m_mutex);
-
-                num_waiting++;
-                m_cv.wait(lock, [this]{return !m_ToExecute.empty() || m_quit; } ); // keep waiting if the queue is empty.
-                num_waiting--;
-
-                if(m_quit)
-                {
-                    break;
-                }
-                if( m_ToExecute.size() )
-                {
-                    Job = m_ToExecute.front();
-                    m_ToExecute.pop();
-
-                }
+                std::cout << "Thread " << std::this_thread::get_id() << " exiting " << std::endl;
+                m_semaphore.notify();
+                break;
             }
+            if( m_ToExecute.size() )
+            {
+                ExecNode * Job = m_ToExecute.front();
+                m_ToExecute.pop();
+                m_semaphore.notify();
 
-            ++num_running;
-            Job->execute();
-            --num_running;
-
-            m_cv.notify_all();
+                ++num_running;
+                Job->execute();
+                --num_running;
+            }
         }
-
-        m_cv.notify_all();
-
     }
 
 
@@ -478,8 +466,7 @@ private:
    void __append_node_to_queue( ExecNode * node)
    {
        m_ToExecute.push(node);
-       m_cv.notify_all();
-
+       m_semaphore.notify();
    }
 
    friend class ExecNode;
