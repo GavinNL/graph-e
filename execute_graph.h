@@ -17,7 +17,7 @@
 
 
 
-class execution_graph_base;
+class node_graph;
 class exec_node;
 class resource_node;
 using exec_node_p     = std::shared_ptr<exec_node>;
@@ -33,7 +33,7 @@ using resource_node_w  = std::weak_ptr<resource_node>;
 class exec_node
 {
 protected:
-    friend class execution_graph_base;
+    friend class node_graph;
     friend class ResourceRegistry;
 
     std::string  m_name;
@@ -42,7 +42,7 @@ protected:
     std::mutex   m_mutex;                          // mutex to prevent the node from executing twice
     bool         m_scheduled = false;              // has this node been scheduled to run.
     bool         m_executed = false;               // flag to indicate whether the node has been executed.
-    execution_graph_base * m_Graph; // the parent graph;
+    node_graph * m_Graph; // the parent graph;
 
     uint32_t     m_resourceCount = 0;
 
@@ -248,18 +248,18 @@ class ResourceRegistry
 };
 
 
-class execution_graph_base
+class node_graph
 {
 public:
-    execution_graph_base() {}
-    ~execution_graph_base()
+    node_graph() {}
+    ~node_graph()
     {
     }
 
-    execution_graph_base( execution_graph_base const & other) = delete;
-    execution_graph_base( execution_graph_base && other) = delete;
-    execution_graph_base & operator = ( execution_graph_base const & other) = delete;
-    execution_graph_base & operator = ( execution_graph_base && other) = delete;
+    node_graph( node_graph const & other) = delete;
+    node_graph( node_graph && other) = delete;
+    node_graph & operator = ( node_graph const & other) = delete;
+    node_graph & operator = ( node_graph && other) = delete;
 
 
     /**
@@ -440,8 +440,6 @@ bool exec_node::can_execute() const
     }
     return true;
 }
-
-using node_graph = execution_graph_base;
 
 #endif
 

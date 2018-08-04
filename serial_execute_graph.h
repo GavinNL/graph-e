@@ -9,7 +9,7 @@
 class serial_execute
 {
 public:
-    serial_execute(execution_graph_base & graph) : m_graph(graph)
+    serial_execute(node_graph & graph) : m_graph(graph)
     {
         m_graph.onSchedule = [this](exec_node *N)
         {
@@ -41,7 +41,7 @@ protected:
         m_ToExecute.push(node);
     }
 
-    execution_graph_base                 & m_graph;
+    node_graph                 & m_graph;
     std::queue<exec_node*>                 m_ToExecute;
 
 };

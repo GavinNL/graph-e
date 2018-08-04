@@ -9,7 +9,7 @@ template<typename ThreadPool_t>
 class thread_execute
 {
 public:
-    thread_execute(execution_graph_base & graph) : m_graph(graph)
+    thread_execute(node_graph & graph) : m_graph(graph)
     {
         graph.onSchedule = [this](exec_node *N)
         {
@@ -54,7 +54,7 @@ public:
 
 
 private:
-    execution_graph_base                 & m_graph;
+    node_graph                 & m_graph;
     ThreadPool_t                          *m_thread_pool = nullptr;
 };
 
