@@ -14,34 +14,93 @@
 #include <iostream>
 #include <iomanip>
 
-auto global_start = std::chrono::system_clock::now();
+
 uint32_t global_thread_count=0;
 
-static std::chrono::microseconds time()
+static uint64_t time()
 {
-    return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start);
+    static auto global_start = std::chrono::system_clock::now();
+    return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start).count();
 }
 
-thread_local uint32_t thread_number=global_thread_count++;
-
-thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
-
 //#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
-#define FOUT std::cout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
+
 #define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
+
+/**
+  If USE_FILE_OUTPUT is defined. Each thread will print to it's own file. To visualize the flow of the
+  node calls. Use the following command from bash
+
+  cat thread_* | sort -n
+
+  This will concatentate all the logs into a file to visualize the thread execution. The time
+  stamps are in microseconds
+
+  //------
+       2:                                                Node1 Start
+       4:        Node0 Start
+  750106:                                                y available
+  750129:                                                Node1 End
+ 1000104:        x available
+ 1000184:                                                                                        Node2 Start
+ 1250266:                                                                                        z available
+ 1250288:                                                                                        Node2 End
+ 2000226:        w available
+ 2000228:                                                Node4 started
+ 2000247:                                                                                        Node3 Start
+ 2000250:        Node0 Ended
+ 2250342:                                                Node4 ended
+ 2500336:                                                                                        Node3 end
+
+  //------
+  **/
+#define USE_FILE_OUTPUT
+
+#if defined USE_FILE_OUTPUT
+thread_local uint32_t thread_number = global_thread_count++;
+thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
+#define FOUT tout << std::setw(8) << time() << ": " << std::string( 40*thread_number, ' ')
+#else
+#define FOUT std::cout << std::setw(8) << time() << ": " << std::string( 40*thread_number, ' ')
+#endif
+
+
+/**
+ * @brief The Node0 class
+ *
+ * Node 0 is an execution node which will perofrm some kind of computation
+ *
+ * Each node must define a sub struction called Data_t, which will
+ * be used to hold all the resources required for the node
+ */
 class Node0
 {
     public:
 
     struct Data_t
     {
+        // Node 0 will produce a resource named w and a resource named x.
         Resource<int> w;
         Resource<int> x;
     };
 
+    /**
+     * @brief registerResources
+     * @param data
+     * @param G
+     * This function is called when the node is added to the graph.
+     * We will use this to create promises and future resources.
+     *
+     * A promise resource indicates that this Node will produce
+     * the resource by the time it finishes executing.
+     *
+     * A Future resource is a required resource. This resoruce will
+     * become available when another node has created it.
+     */
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
+        // Node 0 will promise to create 2 int resources named w and x.
         data.w = G.create_PromiseResource<int>("w");
         data.x = G.create_PromiseResource<int>("x");
     }
@@ -51,11 +110,16 @@ class Node0
         FOUT << "Node0 Start" << std::endl;
 
         WAIT(1000);
-        G.x.set(1); G.x.make_available();
+        G.x.set(1);
+        G.x.make_available(); // make x available
+                              // at this point, if running in threaded mode, will
+                              // schedule any nodes that only depend on x to run.
+        FOUT <<  "x available" << std::endl;
 
         WAIT(1000);
         G.w.set(3);
-        G.w.make_available();
+        G.w.make_available(); // make w available.
+        FOUT <<  "w available" << std::endl;
 
         FOUT << "Node0 Ended" << std::endl;
     }
@@ -75,6 +139,7 @@ class Node1
 
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
+        // Node1 will promise to create resource y
         data.y = G.create_PromiseResource<int>("y");
     }
 
@@ -85,6 +150,7 @@ class Node1
         WAIT(750);
         G.y.set(2);
         G.y.make_available();
+        FOUT <<  "y available" << std::endl;
 
         FOUT << "Node1 End" << std::endl;
     }
@@ -104,9 +170,13 @@ class Node2
 
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
-        data.x = G.create_FutureResource<int>("x");
-        data.y = G.create_FutureResource<int>("y");
+        // Node 2 requires x and y to execute.
+        // This means, Node 2 will only be scheduled once
+        // node 0 has created x and node 1 has created y
+        data.x = G.create_FutureResource<int>("x"); // created by node 0
+        data.y = G.create_FutureResource<int>("y"); // created by node 1
 
+        // given x and y, Node2 will produce z
         data.z = G.create_PromiseResource<int>("z");
     }
 
@@ -116,8 +186,9 @@ class Node2
 
         WAIT(250);
         //FOUT << "  z available: " << 5 << std::endl;
-        G.z.set(5);
+        G.z.set(3);
         G.z.make_available();
+        FOUT <<  "z available" << std::endl;
 
         FOUT << "Node2 End" << std::endl;
     }
@@ -137,6 +208,7 @@ class Node3
 
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
+        // Node 3 requires 3 resources. It does not produce any
         data.x = G.create_FutureResource<int>("x");
         data.w = G.create_FutureResource<int>("w");
         data.z = G.create_FutureResource<int>("z");
@@ -162,6 +234,7 @@ class Node4
 
     void registerResources(Data_t & data, ResourceRegistry & G)
     {
+        // node 4 needs 1 resource, w.
         data.w = G.create_FutureResource<int>("w");
     }
 
@@ -181,6 +254,10 @@ int main(int argc, char **argv)
 #define USE_THREAD_POOL
 
     node_graph G;
+
+    // Ade nodes to the graph. Nodes can be added in any order
+    // as long as they clearly define their resource requirements.
+
     G.add_node<Node2>().set_name("Node_2"); // node added and constructed
     G.add_node<Node0>().set_name("Node_0"); // node added and constructed
     G.add_node<Node1>().set_name("Node_1"); // node added and constructed
@@ -233,6 +310,11 @@ int main(int argc, char **argv)
     P.wait();
     #endif
 
+    //==================================
+
+    // Pring the graph is dot format.
+    // Copy and paste the output in a dot renderer: http://www.webgraphviz.com/
+    G.print();
     return 0;
 
 }

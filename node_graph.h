@@ -349,6 +349,11 @@ public:
         std::cout << "Num To Executing: " << m_numToExecute << std::endl;
     }
 
+    /**
+     * @brief print
+     *
+     * Prints the graph in dot format.
+     */
     void print()
     {
         std::cout << "digraph G {" << std::endl;
