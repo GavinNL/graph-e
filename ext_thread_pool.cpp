@@ -1,4 +1,4 @@
-#include "framegraph3.h"
+#include "execute_graph.h".h"
 
 #include <memory>
 #include <iostream>
@@ -191,7 +191,7 @@ int main(int argc, char **argv)
 
     ThreadPoolWrapper TW(T);
 
-    FrameGraphThreadPool<ThreadPoolWrapper> G;
+    execution_graph_base_thread_pool<ThreadPoolWrapper> G;
 
     G.SetThreadPool(&TW);
 #else
