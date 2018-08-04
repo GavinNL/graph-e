@@ -180,6 +180,14 @@ int main(int argc, char **argv)
 {
 #define USE_THREAD_POOL
 
+    node_graph G;
+    G.add_node<Node2>().set_name("Node_2"); // node added and constructed
+    G.add_node<Node0>().set_name("Node_0"); // node added and constructed
+    G.add_node<Node1>().set_name("Node_1"); // node added and constructed
+    G.add_node<Node4>().set_name("Node_4"); // node added and constructed
+    G.add_node<Node3>().set_name("Node_3"); // node added and constructed
+
+
 #if defined USE_THREAD_POOL
 
     /**
@@ -201,34 +209,27 @@ int main(int argc, char **argv)
         gnl::thread_pool *m_threadpool;
     };
 
+    // Create an instance of the threadpool we want to use
+    // and wrap our ThreadPoolWrapper around it.
     gnl::thread_pool T(3);
-
     ThreadPoolWrapper TW(T);
 
-    thread_pool_execution_graph<ThreadPoolWrapper> G;
+    thread_execute<ThreadPoolWrapper> P(G);
+    P.set_thread_pool(&TW);
 
-    G.set_thread_pool(&TW);
 #else
-    serial_execution_graph G;
+    serial_execute P(G);
 #endif
 
-    G.add_node<Node2>().set_name("Node_2"); // node added and constructed
-    G.add_node<Node0>().set_name("Node_0"); // node added and constructed
-    G.add_node<Node1>().set_name("Node_1"); // node added and constructed
-    G.add_node<Node4>().set_name("Node_4"); // node added and constructed
-    G.add_node<Node3>().set_name("Node_3"); // node added and constructed
+    // Execute the graph. If using the serial execute this will block
+    // if using the threadpool
+    P.execute();
 
-    G.print_info();
 
-    G.execute();
+    #if defined USE_THREAD_POOL
+    P.wait();
+    #endif
 
-    G.print_info();
-
-#if defined USE_THREAD_POOL
-    G.wait();
-#endif
-
-    G.print();
     return 0;
 
 }

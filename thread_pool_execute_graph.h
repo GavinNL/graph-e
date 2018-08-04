@@ -6,9 +6,17 @@
 #include "execute_graph.h"
 
 template<typename ThreadPool_t>
-class thread_pool_execution_graph : public execution_graph_base
+class thread_execute
 {
 public:
+    thread_execute(execution_graph_base & graph) : m_graph(graph)
+    {
+        graph.onSchedule = [this](exec_node *N)
+        {
+            m_thread_pool->operator()(N->execute);
+        };
+    }
+
     void set_thread_pool(ThreadPool_t * T)
     {
         m_thread_pool = T;
@@ -18,16 +26,16 @@ public:
     {
         return m_thread_pool;
     }
-    ~thread_pool_execution_graph()
+    ~thread_execute()
     {
-        std::cout << "execution_graph_base_thread_pool::Destructor!" << std::endl;
+        //std::cout << "execution_graph_base_thread_pool::Destructor!" << std::endl;
         wait();
-        std::cout << "Waiting for threads to exit!" << std::endl;
+        //std::cout << "Waiting for threads to exit!" << std::endl;
     }
 
     void wait()
     {
-        while( m_numRunning > 0 || m_numToExecute > 0)
+        while( m_graph.get_num_running() > 0 || m_graph.get_left_to_execute() > 0)
         {
             std::this_thread::sleep_for( std::chrono::microseconds(500));
         }
@@ -35,22 +43,18 @@ public:
 
     void execute()
     {
-        for(auto & N : m_exec_nodes) // place all the nodes with no resource requirements onto the queue.
+        for(auto & N : m_graph.get_exec_nodes()) // place all the nodes with no resource requirements onto the queue.
         {
             if( N->can_execute() )
             {
-                schedule_node( N.get() );
+                m_graph.schedule_node(N.get());
             }
         }
-    }
-protected:
-    virtual void __schedule_node_for_execution( exec_node * node) override
-    {
-        m_thread_pool->operator()(node->execute);
     }
 
 
 private:
+    execution_graph_base                 & m_graph;
     ThreadPool_t                          *m_thread_pool = nullptr;
 };
 

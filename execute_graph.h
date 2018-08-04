@@ -248,7 +248,6 @@ class ResourceRegistry
 };
 
 
-
 class execution_graph_base
 {
 public:
@@ -315,7 +314,8 @@ public:
     void schedule_node( exec_node * p)
     {
         ++m_numToExecute;
-        __schedule_node_for_execution(p);
+        if(onSchedule)
+            onSchedule(p);
     }
 
     /**
@@ -381,8 +381,23 @@ public:
 
     }
 
+    std::vector< exec_node_p > & get_exec_nodes()
+    {
+        return m_exec_nodes;
+    }
 
+
+    uint32_t get_num_running() const
+    {
+        return m_numRunning;
+    }
+
+    uint32_t get_left_to_execute() const
+    {
+        return m_numToExecute;
+    }
 protected:
+
 
     std::vector< exec_node_p >             m_exec_nodes;
     std::map<std::string, resource_node_p> m_resources;
@@ -390,18 +405,9 @@ protected:
     uint32_t m_numRunning   = 0;
     uint32_t m_numToExecute = 0;
 
-    /**
-    * @brief __append_node_to_queue
-    * @param node
-    *
-    * Append a node to the execution queue. so that it can be executed
-    * when the next thread worker is available.
-    */
-   virtual void __schedule_node_for_execution( exec_node * node) = 0;
-
-
    friend class exec_node;
-
+public:
+   std::function<void(exec_node*)>  onSchedule;
 };
 
 inline void exec_node::trigger()
@@ -435,6 +441,7 @@ bool exec_node::can_execute() const
     return true;
 }
 
+using node_graph = execution_graph_base;
 
 #endif
 
