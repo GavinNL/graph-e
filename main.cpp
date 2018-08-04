@@ -1,10 +1,18 @@
-#include "framegraph2.h"
+#include "thread_pool_execute_graph.h"
+#include "serial_execute_graph.h"
 
 #include <memory>
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <sstream>
+
+// Thread pool class from
+#include <gnl/gnl_threadpool.h>
+
+#include <sstream>
+#include <iostream>
+#include <iomanip>
 
 auto global_start = std::chrono::system_clock::now();
 uint32_t global_thread_count=0;
@@ -168,44 +176,59 @@ class Node4
 
 
 
-
-
 int main(int argc, char **argv)
 {
+#define USE_THREAD_POOL
 
-    FrameGraph G;
+#if defined USE_THREAD_POOL
 
-    G.AddNode<Node2>(); // node added and constructed
-    G.AddNode<Node0>(); // node added and constructed
-    G.AddNode<Node1>(); // node added and constructed
-    G.AddNode<Node4>(); // node added and constructed
-    G.AddNode<Node3>(); // node added and constructed
-
-    // Serial Execution: Nodes are executed in a single thread
-    // nodes with 0 resource requirements are executed first
+    /**
+     * @brief The ThreadPoolWrapper struct
+     * We need to use a wrapper for the thread pool to
+     * take a function<void(void)> object and
+     * push it onto the threadpool to allow it to
+     * execute
+     */
+    struct ThreadPoolWrapper
     {
-        auto s = std::chrono::system_clock::now();
-        G.ExecuteSerial();
-        auto e = std::chrono::system_clock::now();
-
-        std::cout << "Serial run: " << std::chrono::duration<double>(e-s).count() << std::endl;
-    }
-
-
-    // Threaded Execution: Each node is executed as part of a threadpool
-    // The threadpool.  This function will block until
-    // all nodes have been executed.
-    G.Reset();
-    {
-        auto s = std::chrono::system_clock::now();
+        ThreadPoolWrapper( gnl::thread_pool & T) : m_threadpool(&T)
         {
-            G.ExecuteThreaded(3);
-            G.Wait();
         }
-        auto e = std::chrono::system_clock::now();
-        std::cout << "Threaded run: " << std::chrono::duration<double>(e-s).count() << std::endl;
-    }
-    G.print();
+        void operator()( std::function<void(void)> & exec)
+        {
+            m_threadpool->push(exec);
+        }
+        gnl::thread_pool *m_threadpool;
+    };
 
+    gnl::thread_pool T(3);
+
+    ThreadPoolWrapper TW(T);
+
+    thread_pool_execution_graph<ThreadPoolWrapper> G;
+
+    G.set_thread_pool(&TW);
+#else
+    serial_execution_graph G;
+#endif
+
+    G.add_node<Node2>().set_name("Node_2"); // node added and constructed
+    G.add_node<Node0>().set_name("Node_0"); // node added and constructed
+    G.add_node<Node1>().set_name("Node_1"); // node added and constructed
+    G.add_node<Node4>().set_name("Node_4"); // node added and constructed
+    G.add_node<Node3>().set_name("Node_3"); // node added and constructed
+
+    G.print_info();
+
+    G.execute();
+
+    G.print_info();
+
+#if defined USE_THREAD_POOL
+    G.wait();
+#endif
+
+    G.print();
     return 0;
+
 }
