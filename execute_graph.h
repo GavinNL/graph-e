@@ -30,7 +30,10 @@ using resource_node_w  = std::weak_ptr<resource_node>;
  */
 class exec_node
 {
-public:
+protected:
+    friend class execution_graph_base;
+    friend class ResourceRegistry;
+
     std::string  m_name;
     std::any     m_NodeClass;                      // an instance of the Node class
     std::any     m_NodeData;                       // an instance of the node data
@@ -44,8 +47,9 @@ public:
     std::vector<resource_node_w> m_requiredResources; // a list of required resources
     std::vector<resource_node_w> m_producedResources; // a list of required resources
 
-    std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
+public:
+    std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
     // nudge the exec_node to check whether all its resources are available.
     // if they are, then tell the execution_graph_base to schedule its execution
@@ -114,8 +118,10 @@ public:
 template<typename T>
 class Resource
 {
-public:
+protected:
+    friend class ResourceRegistry;
     resource_node_w m_node;
+public:
     T & get()
     {
         return m_node.lock()->Get<T>();//std::any_cast<T&>( m_node.lock()->m_resource );
