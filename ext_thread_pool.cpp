@@ -1,4 +1,5 @@
-#include "execute_graph.h"
+#include "thread_pool_execute_graph.h"
+#include "serial_execute_graph.h"
 
 #include <memory>
 #include <iostream>
@@ -174,7 +175,7 @@ class Node4
 
 int main(int argc, char **argv)
 {
-#define USE_THREAD_POOL
+//#define USE_THREAD_POOL
 
 #if defined USE_THREAD_POOL
 
@@ -195,11 +196,11 @@ int main(int argc, char **argv)
 
     ThreadPoolWrapper TW(T);
 
-    execution_graph_base_thread_pool<ThreadPoolWrapper> G;
+    thread_pool_execution_graph<ThreadPoolWrapper> G;
 
     G.set_thread_pool(&TW);
 #else
-    FrameGraphSerial G;
+    serial_execution_graph G;
 #endif
 
     G.add_node<Node2>(); // node added and constructed
