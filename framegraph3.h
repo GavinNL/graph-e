@@ -501,7 +501,7 @@ public:
 
     virtual void __schedule_node_for_execution( ExecNode * node) override
     {
-        m_thread_pool->push(node->execute);
+        m_thread_pool->operator()(node->execute);
     }
 
 

@@ -173,10 +173,27 @@ int main(int argc, char **argv)
 #define USE_THREAD_POOL
 
 #if defined USE_THREAD_POOL
+
+    struct ThreadPoolWrapper
+    {
+        ThreadPoolWrapper( gnl::thread_pool & T) : m_threadpool(&T)
+        {
+        }
+        void operator()( std::function<void(void)> & exec)
+        {
+            m_threadpool->push(exec);
+        }
+        gnl::thread_pool *m_threadpool;
+    };
+
     gnl::thread_pool T;
     T.create_workers(3);
-    FrameGraphThreadPool<gnl::thread_pool> G;
-    G.SetThreadPool(&T);
+
+    ThreadPoolWrapper TW(T);
+
+    FrameGraphThreadPool<ThreadPoolWrapper> G;
+
+    G.SetThreadPool(&TW);
 #else
     FrameGraphSerial G;
 #endif
