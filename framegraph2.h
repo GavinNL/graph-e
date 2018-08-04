@@ -467,7 +467,6 @@ private:
    {
        m_ToExecute.push(node);
        m_semaphore.notify();
-
    }
 
    friend class ExecNode;
