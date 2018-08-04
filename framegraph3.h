@@ -355,30 +355,16 @@ public:
 
         std::cout << "}" << std::endl;
 
-        // for(auto & E : m_execNodes)
-        // {
-        //     auto name = E->m_name;
-        //     auto count = E.use_count();
-        //     std::cout <<  MAKE_NAME(name) << " use count: " << count << std::endl;
-        // }
-        // for(auto & E : m_resources)
-        // {
-        //     auto name = E.first;
-        //     auto count = E.second.use_count();
-        //     std::cout <<  name << " use count: " << count << std::endl;
-        // }
     }
+
+
+protected:
 
     std::vector< ExecNode_p >             m_execNodes;
     std::map<std::string, ResourceNode_p> m_resources;
 
-    // queue of all the nodes ready to be launched
-    //std::queue<ExecNode*>                 m_ToExecute;
-
-    uint32_t m_numRunning = 0;
+    uint32_t m_numRunning   = 0;
     uint32_t m_numToExecute = 0;
-
-protected:
 
     /**
     * @brief __append_node_to_queue
