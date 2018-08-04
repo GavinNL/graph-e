@@ -251,7 +251,7 @@ class Node4
 
 int main(int argc, char **argv)
 {
-#define USE_THREAD_POOL
+//#define USE_THREAD_POOL
 
     node_graph G;
 
@@ -298,7 +298,7 @@ int main(int argc, char **argv)
     P.set_thread_pool(&TW);
 
 #else
-    serial_execute P(G);
+    serial_executor P(G);
 #endif
 
     // Execute the graph. If using the serial execute this will block

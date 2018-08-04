@@ -16,6 +16,7 @@
 #include <iostream>
 
 
+using duration = std::chrono::microseconds;
 
 class node_graph;
 class exec_node;
@@ -44,6 +45,7 @@ protected:
     bool         m_executed = false;               // flag to indicate whether the node has been executed.
     node_graph * m_Graph; // the parent graph;
 
+    duration     m_exec_start_time_us;            // the time at which this node was executed
     uint32_t     m_resourceCount = 0;
 
     std::vector<resource_node_w> m_requiredResources; // a list of required resources
@@ -94,9 +96,11 @@ protected:
     bool m_is_available = false;
 
 public:
+    duration m_time_available;
     void make_available(bool av = true)
     {
         m_is_available = av;
+        m_time_available = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
     }
 
     bool is_available() const
@@ -294,6 +298,7 @@ public:
               if( rawp->m_mutex.try_lock() ) // try to lock the mutex
               {                              // if we have acquired the lock, execute the node
                   rawp->m_executed = true;
+                  rawp->m_exec_start_time_us = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
                   std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
                   --rawp->m_Graph->m_numToExecute;
                   rawp->m_mutex.unlock();
@@ -349,6 +354,22 @@ public:
         std::cout << "Num To Executing: " << m_numToExecute << std::endl;
     }
 
+
+    void print_node_resource_order(exec_node_p & e)
+    {
+        for(auto & r : e->m_requiredResources)
+        {
+            std::cout << r.lock()->get_name() << " -> " << e->get_name() << std::endl;
+        }
+        for(auto & r : e->m_producedResources)
+        {
+            std::cout << e->get_name() << " -> " << r.lock()->get_name() << std::endl;
+        }
+        if( e->m_producedResources.size()==0) return;
+
+        //std::cout << e->m_name <<( e->m_producedResources.size()==0?"\n":" -> ");
+
+    }
     /**
      * @brief print
      *
@@ -356,34 +377,59 @@ public:
      */
     void print()
     {
-        std::cout << "digraph G {" << std::endl;
 
-#define MAKE_NAME(E) E
+        std::map<duration, int> nodes;
         for(auto & E : m_exec_nodes)
         {
-            std::cout <<  MAKE_NAME(E->m_name) << " [shape=square]" << std::endl;
+            auto c = E->m_exec_start_time_us;// - min;
+            nodes[c] = 0;
         }
         for(auto & E : m_resources)
         {
+            auto c = E.second->m_time_available;// - min;
+            nodes[c] = 0;
+        }
+        std::cout << "digraph G {" << std::endl;
+
+
+        auto s = nodes.size();
+        auto min = nodes.begin()->first;
+        for(auto & E : nodes)
+        {
+            std::cout << (E.first-min).count() << (s==1? "\n":" -> ") ;
+            s--;
+        };
+
+        for(auto & E : m_exec_nodes)
+        {
+            E->m_exec_start_time_us -= min;
+            auto c = E->m_exec_start_time_us.count();
+
+            std::cout << " { rank=same " << std::endl;
+            std::cout <<  E->m_name << " [shape=square]" << std::endl;
+            std::cout <<  c  << std::endl;
+            std::cout << "}" << std::endl;
+
+        }
+        for(auto & E : m_resources)
+        {
+            E.second->m_time_available -= min;
+            auto c = E.second->m_time_available.count();// - min;
+
+            std::cout << " { rank=same " << std::endl;
             std::cout <<  E.second->get_name() << " [shape=circle]" << std::endl;
+            std::cout <<  c  << std::endl;
+            std::cout << "}" << std::endl;
+
         }
 
         for(auto & E : m_exec_nodes)
         {
-            for(auto & r : E->m_requiredResources)
-            {
-
-                if(auto R=r.lock() ) std::cout << R->get_name() << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
-            }
-            for(auto & r : E->m_producedResources)
-            {
-                if(auto R=r.lock() ) std::cout << MAKE_NAME(E->m_name) << " -> " << R->get_name()  << std::endl;
-            }
+            print_node_resource_order(E);
         }
 
 
         std::cout << "}" << std::endl;
-
     }
 
     std::vector< exec_node_p > & get_exec_nodes()
