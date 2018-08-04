@@ -15,10 +15,7 @@
 #include <iostream>
 #include <iomanip>
 
-//#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
-//#define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
 
-uint32_t global_count = 0;
 class FrameGraph;
 class ExecNode;
 class ResourceNode;
@@ -120,7 +117,7 @@ public:
         }
     }
 
-    Resource & operator = ( T const & v)
+    Resource & operator = ( T const & v )
     {
         get() = this;
         return *this;
@@ -229,9 +226,11 @@ public:
         {
             std::unique_lock<std::mutex> lock(m_mutex);
             m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
-            quit = true;
+            m_quit = true;
         }
         m_cv.notify_all();
+
+        // wait for all the threads to finish
         for(auto & t : m_threads)
         {
             if(t.joinable())
@@ -257,49 +256,59 @@ public:
     FrameGraph & operator = ( FrameGraph const & other) = delete;
     FrameGraph & operator = ( FrameGraph && other) = delete;
 
+
+    /**
+     * @brief AddNode
+     * @param __args
+     *
+     * Add a node to the Graph. The template class _Tp must contain a struct
+     * named Data_t.
+     */
     template<typename _Tp, typename... _Args>
-      inline void
-      AddNode(_Args&&... __args)
+    inline void AddNode(_Args&&... __args)
+    {
+      typedef typename std::remove_const<_Tp>::type Node_t;
+      typedef typename Node_t::Data_t               Data_t;
+
+      ExecNode_p N   = std::make_shared<ExecNode>();
+
+
+      N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
+      N->m_NodeData  = std::make_any<Data_t>();
+      N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
+      ExecNode* rawp = N.get();
+      rawp->m_Graph  = this;
+
+      // Create the functor which will execute the
+      // Node's operator(data_t &d) method.
+      N->execute = [rawp]()
       {
-          typedef typename std::remove_const<_Tp>::type Node_t;
-          typedef typename Node_t::Data_t               Data_t;
-
-          ExecNode_p N   = std::make_shared<ExecNode>();
-
-
-          N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
-          N->m_NodeData  = std::make_any<Data_t>();
-          N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
-          ExecNode* rawp = N.get();
-          rawp->m_Graph = this;
-          N->execute = [rawp]()
+          if( !rawp->m_executed ) // if we haven't executed yet.
           {
-              if( !rawp->m_executed ) // if we haven't executed yet.
-              {
 
-                  if( rawp->m_mutex.try_lock() ) // try to lock the mutex
-                  {                              // if we have acquired the lock, execute the node
-                      rawp->m_executed = true;
-                      std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
-                      rawp->m_mutex.unlock();
-                  }
-              } else {
-
+              if( rawp->m_mutex.try_lock() ) // try to lock the mutex
+              {                              // if we have acquired the lock, execute the node
+                  rawp->m_executed = true;
+                  std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
+                  rawp->m_mutex.unlock();
               }
-          };
+          }
+      };
 
-          ResourceRegistry R(N,m_resources,
-                             N->m_requiredResources);
+      ResourceRegistry R(N,  m_resources,  N->m_requiredResources);
 
-          std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
+      std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
 
-          m_execNodes.push_back(N);
+      m_execNodes.push_back(N);
 
-      }
-
+    }
 
 
-    void Reset()
+    /**
+     * @brief Reset
+     * @param destroy_resources - destroys all the resources as well. Default is false.
+     */
+    void Reset(bool destroy_resources = false)
     {
         for(auto & N : m_execNodes)
         {
@@ -410,12 +419,11 @@ public:
 
     // queue of all the nodes ready to be launched
     std::queue<ExecNode*>                 m_ToExecute;
-    bool quit=false;
+    std::vector< std::thread >            m_threads;
 
-    std::vector< std::thread > m_threads;
-
-    std::mutex              m_mutex;
-    std::condition_variable m_cv;
+    bool                                  m_quit = false;
+    std::mutex                            m_mutex;
+    std::condition_variable               m_cv;
 
     uint32_t num_running = 0;
     uint32_t num_waiting = 0;
@@ -432,10 +440,10 @@ private:
                 std::unique_lock<std::mutex> lock(m_mutex);
 
                 num_waiting++;
-                m_cv.wait(lock, [this]{return !m_ToExecute.empty() || quit; } ); // keep waiting if the queue is empty.
+                m_cv.wait(lock, [this]{return !m_ToExecute.empty() || m_quit; } ); // keep waiting if the queue is empty.
                 num_waiting--;
 
-                if(quit)
+                if(m_quit)
                 {
                     break;
                 }

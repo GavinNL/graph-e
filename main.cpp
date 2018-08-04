@@ -16,15 +16,12 @@ static std::chrono::microseconds time()
     return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start);
 }
 
-//thread_local ThreadOut T;
-//thread_local std::ostream & tout = T.out;
-
 thread_local uint32_t thread_number=global_thread_count++;
 
 thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
 
-#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
-//#define FOUT std::cout << std::setw(8) << ThreadOut::time().count() << ": " << std::string( 40*thread_number, ' ')
+//#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
+#define FOUT std::cout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
 #define WAIT(ms)// std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
 class Node0
