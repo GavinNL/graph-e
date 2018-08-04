@@ -6,10 +6,10 @@
 #include "node_graph.h"
 
 template<typename ThreadPool_t>
-class thread_execute
+class threaded_executor
 {
 public:
-    thread_execute(node_graph & graph) : m_graph(graph)
+    threaded_executor(node_graph & graph) : m_graph(graph)
     {
         graph.onSchedule = [this](exec_node *N)
         {
@@ -26,7 +26,7 @@ public:
     {
         return m_thread_pool;
     }
-    ~thread_execute()
+    ~threaded_executor()
     {
         //std::cout << "execution_graph_base_thread_pool::Destructor!" << std::endl;
         wait();

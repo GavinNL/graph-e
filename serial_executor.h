@@ -6,10 +6,10 @@
 #include "node_graph.h"
 
 
-class serial_execute
+class serial_executor
 {
 public:
-    serial_execute(node_graph & graph) : m_graph(graph)
+    serial_executor(node_graph & graph) : m_graph(graph)
     {
         m_graph.onSchedule = [this](exec_node *N)
         {

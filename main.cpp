@@ -1,5 +1,5 @@
-#include "thread_pool_execute_graph.h"
-#include "serial_execute_graph.h"
+#include "threaded_executor.h"
+#include "serial_executor.h"
 
 #include <memory>
 #include <iostream>
@@ -211,10 +211,13 @@ int main(int argc, char **argv)
 
     // Create an instance of the threadpool we want to use
     // and wrap our ThreadPoolWrapper around it.
+    //
+    // It is the developers responsibility to make sure
+    // the threadpool does not get destroyed before the executor
     gnl::thread_pool T(3);
     ThreadPoolWrapper TW(T);
 
-    thread_execute<ThreadPoolWrapper> P(G);
+    threaded_executor<ThreadPoolWrapper> P(G);
     P.set_thread_pool(&TW);
 
 #else
