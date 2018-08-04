@@ -10,29 +10,11 @@
 
 auto global_start = std::chrono::system_clock::now();
 uint32_t global_thread_count=0;
-class ThreadOut
-{
-public:
-    ThreadOut()
-    {
-        std::stringstream S;
-        S << "thread_";
-        S << global_thread_count;
-        thread_number = global_thread_count++;
-        out.open( S.str() );
-    }
 
-    ~ThreadOut()
-    {
-        out.close();
-    }
-    static std::chrono::microseconds time()
-    {
-        return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start);
-    }
-    uint32_t thread_number;
-    std::ofstream out;
-};
+static std::chrono::microseconds time()
+{
+    return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start);
+}
 
 //thread_local ThreadOut T;
 //thread_local std::ostream & tout = T.out;
@@ -41,9 +23,9 @@ thread_local uint32_t thread_number=global_thread_count++;
 
 thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
 
-#define FOUT tout << std::setw(8) << ThreadOut::time().count() << ": " << std::string( 40*thread_number, ' ')
+#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
 //#define FOUT std::cout << std::setw(8) << ThreadOut::time().count() << ": " << std::string( 40*thread_number, ' ')
-#define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
+#define WAIT(ms)// std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
 class Node0
 {
@@ -199,9 +181,6 @@ int main(int argc, char **argv)
     FrameGraph G;
 
     G.AddNode<Node2>(); // node added and constructed
-    G.AddNode<Node2>(); // node added and constructed
-    G.AddNode<Node2>(); // node added and constructed
-    G.AddNode<Node2>(); // node added and constructed
     G.AddNode<Node0>(); // node added and constructed
     G.AddNode<Node1>(); // node added and constructed
     G.AddNode<Node4>(); // node added and constructed
@@ -229,7 +208,7 @@ int main(int argc, char **argv)
             G.Wait();
         }
         auto e = std::chrono::system_clock::now();
-        std::cout << "Serial run: " << std::chrono::duration<double>(e-s).count() << std::endl;
+        std::cout << "Threaded run: " << std::chrono::duration<double>(e-s).count() << std::endl;
     }
     G.print();
 
