@@ -15,16 +15,14 @@
 #include <iostream>
 #include <iomanip>
 
-//#define FOUT fout << std::setw(8) << ThreadStreams::time().count() << ": " << std::string( 40*thread_number, ' ')
-//#define FOUT std::cout << ": " << std::this_thread::get_id() << ": "
 
-uint32_t global_count = 0;
 class FrameGraph;
 class ExecNode;
 class ResourceNode;
-using ExecNode_p = std::shared_ptr<ExecNode>;
+using ExecNode_p     = std::shared_ptr<ExecNode>;
 using ResourceNode_p = std::shared_ptr<ResourceNode>;
-
+using ExecNode_w      = std::weak_ptr<ExecNode>;
+using ResourceNode_w  = std::weak_ptr<ResourceNode>;
 
 /**
  * @brief The ExecNode class
@@ -44,8 +42,8 @@ public:
 
     uint32_t     m_resourceCount = 0;
 
-    std::vector<ResourceNode_p> m_requiredResources; // a list of required resources
-    std::vector<ResourceNode_p> m_producedResources; // a list of required resources
+    std::vector<ResourceNode_w> m_requiredResources; // a list of required resources
+    std::vector<ResourceNode_w> m_producedResources; // a list of required resources
 
     std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
@@ -69,7 +67,7 @@ class ResourceNode
 public:
     std::any                m_resource;
     std::string             m_name;
-    std::vector<ExecNode_p> m_Nodes; // list of nodes that must be triggered
+    std::vector<ExecNode_w> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
     bool m_is_available = false;
 
@@ -93,28 +91,33 @@ template<typename T>
 class Resource
 {
 public:
-    ResourceNode_p m_node;
+    ResourceNode_w m_node;
     T & get()
     {
-        return std::any_cast<T&>(m_node->m_resource);
+        return std::any_cast<T&>(m_node.lock()->m_resource);
     }
 
     void make_available()
     {
-        if( !m_node->is_available() )
+        auto node = m_node.lock();
+        if( node )
         {
-            m_node->make_available();
-
-            // loop through all the exec nodes which require this resource
-            // and trigger them.
-            for(auto & n : m_node->m_Nodes)
+            if( !node->is_available() )
             {
-                n->trigger();
+                node->make_available();
+
+                // loop through all the exec nodes which require this resource
+                // and trigger them.
+                for(auto & N : node->m_Nodes)
+                {
+                    if( auto n = N.lock())
+                        n->trigger();
+                }
             }
         }
     }
 
-    Resource & operator = ( T const & v)
+    Resource & operator = ( T const & v )
     {
         get() = this;
         return *this;
@@ -139,13 +142,13 @@ using Resource_p = std::shared_ptr< Resource<T> >;
 class ResourceRegistry
 {
     std::map<std::string, ResourceNode_p> & m_resources;
-    std::vector<ResourceNode_p> & m_required_resources;
+    std::vector<ResourceNode_w> & m_required_resources;
     ExecNode_p & m_Node;
 
     public:
         ResourceRegistry( ExecNode_p & node,
                           std::map<std::string, ResourceNode_p> & m,
-                          std::vector<ResourceNode_p> & required_resources) :
+                          std::vector<ResourceNode_w> & required_resources) :
             m_Node(node),
             m_resources(m),
             m_required_resources(required_resources)
@@ -223,9 +226,11 @@ public:
         {
             std::unique_lock<std::mutex> lock(m_mutex);
             m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
-            quit = true;
+            m_quit = true;
         }
         m_cv.notify_all();
+
+        // wait for all the threads to finish
         for(auto & t : m_threads)
         {
             if(t.joinable())
@@ -236,52 +241,74 @@ public:
 
     }
 
+    void Wait()
+    {
+        m_cv.notify_all();
+
+        {
+            std::unique_lock<std::mutex> lock(m_mutex);
+            m_cv.wait(lock, [this]{return num_waiting==m_threads.size(); } ); // keep waiting if the queue is empty.
+        }
+    }
+
     FrameGraph( FrameGraph const & other) = delete;
     FrameGraph( FrameGraph && other) = delete;
     FrameGraph & operator = ( FrameGraph const & other) = delete;
     FrameGraph & operator = ( FrameGraph && other) = delete;
 
+
+    /**
+     * @brief AddNode
+     * @param __args
+     *
+     * Add a node to the Graph. The template class _Tp must contain a struct
+     * named Data_t.
+     */
     template<typename _Tp, typename... _Args>
-      inline void
-      AddNode(_Args&&... __args)
+    inline void AddNode(_Args&&... __args)
+    {
+      typedef typename std::remove_const<_Tp>::type Node_t;
+      typedef typename Node_t::Data_t               Data_t;
+
+      ExecNode_p N   = std::make_shared<ExecNode>();
+
+
+      N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
+      N->m_NodeData  = std::make_any<Data_t>();
+      N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
+      ExecNode* rawp = N.get();
+      rawp->m_Graph  = this;
+
+      // Create the functor which will execute the
+      // Node's operator(data_t &d) method.
+      N->execute = [rawp]()
       {
-          typedef typename std::remove_const<_Tp>::type Node_t;
-          typedef typename Node_t::Data_t               Data_t;
-
-          ExecNode_p N   = std::make_shared<ExecNode>();
-
-          N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
-          N->m_NodeData  = std::make_any<Data_t>();
-          N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
-          ExecNode* rawp = N.get();
-          rawp->m_Graph = this;
-          N->execute = [rawp]()
+          if( !rawp->m_executed ) // if we haven't executed yet.
           {
-              if( !rawp->m_executed ) // if we haven't executed yet.
-              {
 
-                  if( rawp->m_mutex.try_lock() ) // try to lock the mutex
-                  {                              // if we have acquired the lock, execute the node
-                      rawp->m_executed = true;
-                      std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
-                      rawp->m_mutex.unlock();
-                  }
-              } else {
-
+              if( rawp->m_mutex.try_lock() ) // try to lock the mutex
+              {                              // if we have acquired the lock, execute the node
+                  rawp->m_executed = true;
+                  std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
+                  rawp->m_mutex.unlock();
               }
-          };
+          }
+      };
 
-          ResourceRegistry R(N,m_resources,
-                             N->m_requiredResources);
+      ResourceRegistry R(N,  m_resources,  N->m_requiredResources);
 
-          std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
+      std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
 
-          m_execNodes.push_back(N);
-      }
+      m_execNodes.push_back(N);
+
+    }
 
 
-
-    void Reset()
+    /**
+     * @brief Reset
+     * @param destroy_resources - destroys all the resources as well. Default is false.
+     */
+    void Reset(bool destroy_resources = false)
     {
         for(auto & N : m_execNodes)
         {
@@ -359,19 +386,32 @@ public:
 
         for(auto & E : m_execNodes)
         {
-            for(auto & R : E->m_requiredResources)
+            for(auto & r : E->m_requiredResources)
             {
-                std::cout << R->m_name << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
+
+                if(auto R=r.lock() ) std::cout << R->m_name << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
             }
-            for(auto & R : E->m_producedResources)
+            for(auto & r : E->m_producedResources)
             {
-                std::cout << MAKE_NAME(E->m_name) << " -> " << R->m_name  << std::endl;
+                if(auto R=r.lock() ) std::cout << MAKE_NAME(E->m_name) << " -> " << R->m_name  << std::endl;
             }
         }
 
 
         std::cout << "}" << std::endl;
 
+        for(auto & E : m_execNodes)
+        {
+            auto name = E->m_name;
+            auto count = E.use_count();
+            std::cout <<  MAKE_NAME(name) << " use count: " << count << std::endl;
+        }
+        for(auto & E : m_resources)
+        {
+            auto name = E.first;
+            auto count = E.second.use_count();
+            std::cout <<  name << " use count: " << count << std::endl;
+        }
     }
 
     std::vector< ExecNode_p >             m_execNodes;
@@ -379,12 +419,11 @@ public:
 
     // queue of all the nodes ready to be launched
     std::queue<ExecNode*>                 m_ToExecute;
-    bool quit=false;
+    std::vector< std::thread >            m_threads;
 
-    std::vector< std::thread > m_threads;
-
-    std::mutex              m_mutex;
-    std::condition_variable m_cv;
+    bool                                  m_quit = false;
+    std::mutex                            m_mutex;
+    std::condition_variable               m_cv;
 
     uint32_t num_running = 0;
     uint32_t num_waiting = 0;
@@ -401,10 +440,10 @@ private:
                 std::unique_lock<std::mutex> lock(m_mutex);
 
                 num_waiting++;
-                m_cv.wait(lock, [this]{return !m_ToExecute.empty() || quit; } ); // keep waiting if the queue is empty.
+                m_cv.wait(lock, [this]{return !m_ToExecute.empty() || m_quit; } ); // keep waiting if the queue is empty.
                 num_waiting--;
 
-                if(quit)
+                if(m_quit)
                 {
                     break;
                 }
@@ -462,10 +501,16 @@ inline void ExecNode::trigger()
 
 bool ExecNode::can_execute() const
 {
-    for(auto & r : m_requiredResources)
+    for(auto & R : m_requiredResources)
     {
-        if(!r->is_available())
+        auto r = R.lock();
+        if( r )
         {
+            if( !r->is_available() )
+            {
+                return false;
+            }
+        } else {
             return false;
         }
     }
