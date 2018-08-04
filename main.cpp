@@ -7,6 +7,9 @@
 #include <string>
 #include <sstream>
 
+// Thread pool class from
+#include <gnl/gnl_threadpool.h>
+
 #include <sstream>
 #include <iostream>
 #include <iomanip>
@@ -171,14 +174,21 @@ class Node4
 
 };
 
-#include <gnl/gnl_threadpool.h>
+
 
 int main(int argc, char **argv)
 {
-//#define USE_THREAD_POOL
+#define USE_THREAD_POOL
 
 #if defined USE_THREAD_POOL
 
+    /**
+     * @brief The ThreadPoolWrapper struct
+     * We need to use a wrapper for the thread pool to
+     * take a function<void(void)> object and
+     * push it onto the threadpool to allow it to
+     * execute
+     */
     struct ThreadPoolWrapper
     {
         ThreadPoolWrapper( gnl::thread_pool & T) : m_threadpool(&T)
@@ -191,8 +201,7 @@ int main(int argc, char **argv)
         gnl::thread_pool *m_threadpool;
     };
 
-    gnl::thread_pool T;
-    T.create_workers(3);
+    gnl::thread_pool T(3);
 
     ThreadPoolWrapper TW(T);
 
