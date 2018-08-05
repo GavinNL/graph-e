@@ -251,7 +251,7 @@ class Node4
 
 int main(int argc, char **argv)
 {
-//#define USE_THREAD_POOL
+#define USE_THREAD_POOL
 
     node_graph G;
 

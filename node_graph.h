@@ -156,7 +156,7 @@ public:
 
     Resource & operator = ( T const & v )
     {
-        get() = this;
+        get() = v;
         return *this;
     }
 
