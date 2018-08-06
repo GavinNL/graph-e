@@ -3,19 +3,27 @@
 #ifndef SERIAL_EXECUTE_GRAPH_3_H
 #define SERIAL_EXECUTE_GRAPH_3_H
 
-#include "execute_graph.h"
+#include "node_graph.h"
 
-class serial_execution_graph : public execution_graph_base
+
+class serial_executor
 {
 public:
+    serial_executor(node_graph & graph) : m_graph(graph)
+    {
+        m_graph.onSchedule = [this](exec_node *N)
+        {
+            m_ToExecute.push(N);
+        };
+    }
 
     void execute()
     {
-        for(auto & N : m_exec_nodes) // place all the nodes with no resource requirements onto the queue.
+        for(auto & N : m_graph.get_exec_nodes()) // place all the nodes with no resource requirements onto the queue.
         {
             if( N->can_execute() )
             {
-                __schedule_node_for_execution(N.get());
+                m_graph.schedule_node(N.get());
             }
         }
         // execute the all nodes in the queue.
@@ -28,17 +36,15 @@ public:
     }
 
 protected:
-    virtual void __schedule_node_for_execution( exec_node * node) override
+    void __schedule_node_for_execution( exec_node * node)
     {
         m_ToExecute.push(node);
     }
 
-
-
+    node_graph                 & m_graph;
     std::queue<exec_node*>                 m_ToExecute;
 
 };
-
 
 #endif
 

@@ -16,8 +16,9 @@
 #include <iostream>
 
 
+using duration = std::chrono::microseconds;
 
-class execution_graph_base;
+class node_graph;
 class exec_node;
 class resource_node;
 using exec_node_p     = std::shared_ptr<exec_node>;
@@ -33,7 +34,7 @@ using resource_node_w  = std::weak_ptr<resource_node>;
 class exec_node
 {
 protected:
-    friend class execution_graph_base;
+    friend class node_graph;
     friend class ResourceRegistry;
 
     std::string  m_name;
@@ -42,8 +43,9 @@ protected:
     std::mutex   m_mutex;                          // mutex to prevent the node from executing twice
     bool         m_scheduled = false;              // has this node been scheduled to run.
     bool         m_executed = false;               // flag to indicate whether the node has been executed.
-    execution_graph_base * m_Graph; // the parent graph;
+    node_graph * m_Graph; // the parent graph;
 
+    duration     m_exec_start_time_us;            // the time at which this node was executed
     uint32_t     m_resourceCount = 0;
 
     std::vector<resource_node_w> m_requiredResources; // a list of required resources
@@ -94,9 +96,11 @@ protected:
     bool m_is_available = false;
 
 public:
+    duration m_time_available;
     void make_available(bool av = true)
     {
         m_is_available = av;
+        m_time_available = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
     }
 
     bool is_available() const
@@ -152,7 +156,7 @@ public:
 
     Resource & operator = ( T const & v )
     {
-        get() = this;
+        get() = v;
         return *this;
     }
 
@@ -248,19 +252,18 @@ class ResourceRegistry
 };
 
 
-
-class execution_graph_base
+class node_graph
 {
 public:
-    execution_graph_base() {}
-    ~execution_graph_base()
+    node_graph() {}
+    ~node_graph()
     {
     }
 
-    execution_graph_base( execution_graph_base const & other) = delete;
-    execution_graph_base( execution_graph_base && other) = delete;
-    execution_graph_base & operator = ( execution_graph_base const & other) = delete;
-    execution_graph_base & operator = ( execution_graph_base && other) = delete;
+    node_graph( node_graph const & other) = delete;
+    node_graph( node_graph && other) = delete;
+    node_graph & operator = ( node_graph const & other) = delete;
+    node_graph & operator = ( node_graph && other) = delete;
 
 
     /**
@@ -295,6 +298,7 @@ public:
               if( rawp->m_mutex.try_lock() ) // try to lock the mutex
               {                              // if we have acquired the lock, execute the node
                   rawp->m_executed = true;
+                  rawp->m_exec_start_time_us = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
                   std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
                   --rawp->m_Graph->m_numToExecute;
                   rawp->m_mutex.unlock();
@@ -315,7 +319,8 @@ public:
     void schedule_node( exec_node * p)
     {
         ++m_numToExecute;
-        __schedule_node_for_execution(p);
+        if(onSchedule)
+            onSchedule(p);
     }
 
     /**
@@ -349,40 +354,101 @@ public:
         std::cout << "Num To Executing: " << m_numToExecute << std::endl;
     }
 
+
+    void print_node_resource_order(exec_node_p & e)
+    {
+        for(auto & r : e->m_requiredResources)
+        {
+            std::cout << r.lock()->get_name() << " -> " << e->get_name() << std::endl;
+        }
+        for(auto & r : e->m_producedResources)
+        {
+            std::cout << e->get_name() << " -> " << r.lock()->get_name() << std::endl;
+        }
+        if( e->m_producedResources.size()==0) return;
+
+        //std::cout << e->m_name <<( e->m_producedResources.size()==0?"\n":" -> ");
+
+    }
+    /**
+     * @brief print
+     *
+     * Prints the graph in dot format.
+     */
     void print()
     {
-        std::cout << "digraph G {" << std::endl;
 
-#define MAKE_NAME(E) E
+        std::map<duration, int> nodes;
         for(auto & E : m_exec_nodes)
         {
-            std::cout <<  MAKE_NAME(E->m_name) << " [shape=square]" << std::endl;
+            auto c = E->m_exec_start_time_us;// - min;
+            nodes[c] = 0;
         }
         for(auto & E : m_resources)
         {
+            auto c = E.second->m_time_available;// - min;
+            nodes[c] = 0;
+        }
+        std::cout << "digraph G {" << std::endl;
+
+
+        auto s = nodes.size();
+        auto min = nodes.begin()->first;
+        for(auto & E : nodes)
+        {
+            std::cout << (E.first-min).count() << (s==1? "\n":" -> ") ;
+            s--;
+        };
+
+        for(auto & E : m_exec_nodes)
+        {
+            E->m_exec_start_time_us -= min;
+            auto c = E->m_exec_start_time_us.count();
+
+            std::cout << " { rank=same " << std::endl;
+            std::cout <<  E->m_name << " [shape=square]" << std::endl;
+            std::cout <<  c  << std::endl;
+            std::cout << "}" << std::endl;
+
+        }
+        for(auto & E : m_resources)
+        {
+            E.second->m_time_available -= min;
+            auto c = E.second->m_time_available.count();// - min;
+
+            std::cout << " { rank=same " << std::endl;
             std::cout <<  E.second->get_name() << " [shape=circle]" << std::endl;
+            std::cout <<  c  << std::endl;
+            std::cout << "}" << std::endl;
+
         }
 
         for(auto & E : m_exec_nodes)
         {
-            for(auto & r : E->m_requiredResources)
-            {
-
-                if(auto R=r.lock() ) std::cout << R->get_name() << " -> " <<  MAKE_NAME(E->m_name) << std::endl;
-            }
-            for(auto & r : E->m_producedResources)
-            {
-                if(auto R=r.lock() ) std::cout << MAKE_NAME(E->m_name) << " -> " << R->get_name()  << std::endl;
-            }
+            print_node_resource_order(E);
         }
 
 
         std::cout << "}" << std::endl;
+    }
 
+    std::vector< exec_node_p > & get_exec_nodes()
+    {
+        return m_exec_nodes;
     }
 
 
+    uint32_t get_num_running() const
+    {
+        return m_numRunning;
+    }
+
+    uint32_t get_left_to_execute() const
+    {
+        return m_numToExecute;
+    }
 protected:
+
 
     std::vector< exec_node_p >             m_exec_nodes;
     std::map<std::string, resource_node_p> m_resources;
@@ -390,18 +456,9 @@ protected:
     uint32_t m_numRunning   = 0;
     uint32_t m_numToExecute = 0;
 
-    /**
-    * @brief __append_node_to_queue
-    * @param node
-    *
-    * Append a node to the execution queue. so that it can be executed
-    * when the next thread worker is available.
-    */
-   virtual void __schedule_node_for_execution( exec_node * node) = 0;
-
-
    friend class exec_node;
-
+public:
+   std::function<void(exec_node*)>  onSchedule;
 };
 
 inline void exec_node::trigger()
@@ -434,7 +491,6 @@ bool exec_node::can_execute() const
     }
     return true;
 }
-
 
 #endif
 
