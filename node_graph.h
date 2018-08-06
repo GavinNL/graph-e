@@ -277,13 +277,14 @@ public:
     inline exec_node & add_node(_Args&&... __args)
     {
       typedef typename std::remove_const<_Tp>::type Node_t;
-      typedef typename Node_t::Data_t               Data_t;
+      //typedef typename Node_t::Data_t               Data_t;
 
       exec_node_p N   = std::make_shared<exec_node>();
 
+      ResourceRegistry R(N,  m_resources,  N->m_requiredResources);
 
-      N->m_NodeClass = std::make_any<Node_t>( std::forward<_Args>(__args)...);
-      N->m_NodeData  = std::make_any<Data_t>();
+      N->m_NodeClass = std::make_any<Node_t>( R, std::forward<_Args>(__args)...);
+     // N->m_NodeData  = std::make_any<Data_t>();
       N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
       exec_node* rawp = N.get();
       rawp->m_Graph  = this;
@@ -299,16 +300,15 @@ public:
               {                              // if we have acquired the lock, execute the node
                   rawp->m_executed = true;
                   rawp->m_exec_start_time_us = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
-                  std::any_cast< Node_t&>( rawp->m_NodeClass )(   std::any_cast< Data_t&>( rawp->m_NodeData ) );
+                  std::any_cast< Node_t&>( rawp->m_NodeClass )();
                   --rawp->m_Graph->m_numToExecute;
                   rawp->m_mutex.unlock();
               }
           }
       };
 
-      ResourceRegistry R(N,  m_resources,  N->m_requiredResources);
 
-      std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
+      //std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
 
       m_exec_nodes.push_back(N);
 
