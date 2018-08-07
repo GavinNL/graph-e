@@ -129,8 +129,34 @@ public:
     }
 };
 
+
 template<typename T>
-class Resource
+class in_resource
+{
+protected:
+    friend class ResourceRegistry;
+    resource_node_w m_node;
+public:
+    T & get()
+    {
+        return m_node.lock()->Get<T>();
+    }
+
+    in_resource & operator = ( T const & v )
+    {
+        auto & G = get();
+        G = v;
+        return G;
+    }
+
+    operator T&()
+    {
+        return get();
+    }
+};
+
+template<typename T>
+class out_resource
 {
 protected:
     friend class ResourceRegistry;
@@ -154,10 +180,11 @@ public:
         }
     }
 
-    Resource & operator = ( T const & v )
+    out_resource & operator = ( T const & v )
     {
-        get() = v;
-        return *this;
+        auto & G = get();
+        G = v;
+        return G;
     }
 
     operator T&()
@@ -172,9 +199,6 @@ public:
 
     }
 };
-
-template<typename T>
-using Resource_p = std::shared_ptr< Resource<T> >;
 
 class ResourceRegistry
 {
@@ -194,7 +218,7 @@ class ResourceRegistry
         }
 
         template<typename T>
-        Resource<T> create_PromiseResource(const std::string & name)
+        out_resource<T> register_output_resource(const std::string & name)
         {
             if( m_resources.count(name) == 0 )
             {
@@ -204,14 +228,14 @@ class ResourceRegistry
                 m_Node->m_producedResources.push_back(RN);
                 m_resources[name] = RN;
 
-                Resource<T> r;
+                out_resource<T> r;
                 r.m_node = RN;
 
                 return r;
             }
             else
             {
-                Resource<T> r;
+                out_resource<T> r;
                 r.m_node = m_resources.at(name);
                 m_Node->m_producedResources.push_back( r.m_node);
                 return r;
@@ -219,7 +243,7 @@ class ResourceRegistry
         }
 
         template<typename T>
-        Resource<T> create_FutureResource(const std::string & name)
+        in_resource<T> register_input_resource(const std::string & name)
         {
             if( m_resources.count(name) == 0 )
             {
@@ -229,7 +253,7 @@ class ResourceRegistry
                 RN->m_name = name;
                 m_resources[name] = RN;
 
-                Resource<T> r;
+                in_resource<T> r;
                 r.m_node = RN;
 
                 m_required_resources.push_back(RN);
@@ -241,7 +265,7 @@ class ResourceRegistry
                 resource_node_p RN = m_resources[name];
                 RN->m_Nodes.push_back(m_Node);
 
-                Resource<T> r;
+                in_resource<T> r;
                 r.m_node = RN;
 
                 m_required_resources.push_back(RN);

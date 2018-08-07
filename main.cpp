@@ -78,8 +78,8 @@ class Node0
 {
     public:
 
-    Resource<int> w;
-    Resource<int> x;
+    out_resource<int> w;
+    out_resource<int> x;
 
 
     /**
@@ -99,8 +99,8 @@ class Node0
      */
     Node0(ResourceRegistry & G)
     {
-        w = G.create_PromiseResource<int>("w");
-        x = G.create_PromiseResource<int>("x");
+        w = G.register_output_resource<int>("w");
+        x = G.register_output_resource<int>("x");
     }
 
 
@@ -137,12 +137,12 @@ class Node1
 {
     public:
 
-    Resource<int> y;
+    out_resource<int> y;
 
     Node1(ResourceRegistry & G)
     {
         // Node1 will promise to create resource y
-        y = G.create_PromiseResource<int>("y");
+        y = G.register_output_resource<int>("y");
     }
 
     void operator()()
@@ -164,20 +164,20 @@ class Node2
 {
     public:
 
-    Resource<int> x;
-    Resource<int> y;
-    Resource<int> z;
+    in_resource<int> x;
+    in_resource<int> y;
+    out_resource<int> z;
 
     Node2(ResourceRegistry & G)
     {
         // Node 2 requires x and y to execute.
         // This means, Node 2 will only be scheduled once
         // node 0 has created x and node 1 has created y
-        x = G.create_FutureResource<int>("x"); // created by node 0
-        y = G.create_FutureResource<int>("y"); // created by node 1
+        x = G.register_input_resource<int>("x"); // created by node 0
+        y = G.register_input_resource<int>("y"); // created by node 1
 
         // given x and y, Node2 will produce z
-        z = G.create_PromiseResource<int>("z");
+        z = G.register_output_resource<int>("z");
     }
 
     void operator()()
@@ -200,17 +200,17 @@ class Node3
 {
     public:
 
-    Resource<int> x;
-    Resource<int> w;
-    Resource<int> z;
+    in_resource<int> x;
+    in_resource<int> w;
+    in_resource<int> z;
 
 
     Node3( ResourceRegistry & G)
     {
         // Node 3 requires 3 resources. It does not produce any
-        x = G.create_FutureResource<int>("x");
-        w = G.create_FutureResource<int>("w");
-        z = G.create_FutureResource<int>("z");
+        x = G.register_input_resource<int>("x");
+        w = G.register_input_resource<int>("w");
+        z = G.register_input_resource<int>("z");
     }
 
     void operator()()
@@ -227,13 +227,13 @@ class Node4
 {
     public:
 
-    Resource<int> w;
+    in_resource<int> w;
 
 
     Node4(ResourceRegistry & G)
     {
         // node 4 needs 1 resource, w.
-        w = G.create_FutureResource<int>("w");
+        w = G.register_input_resource<int>("w");
     }
 
     void operator()()
