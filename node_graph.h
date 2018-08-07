@@ -277,7 +277,6 @@ public:
     inline exec_node & add_node(_Args&&... __args)
     {
       typedef typename std::remove_const<_Tp>::type Node_t;
-      //typedef typename Node_t::Data_t               Data_t;
 
       exec_node_p N   = std::make_shared<exec_node>();
 
@@ -303,6 +302,15 @@ public:
                   std::any_cast< Node_t&>( rawp->m_NodeClass )();
                   --rawp->m_Graph->m_numToExecute;
                   rawp->m_mutex.unlock();
+
+                  for(auto & r : rawp->m_producedResources)
+                  {
+                    auto R = r.lock();
+                    if( !R->is_available() )
+                    {
+                        throw std::runtime_error( std::string("Node ") + rawp->get_name() + std::string(" failed to create resource: ") + R->get_name());
+                    }
+                  }
               }
           }
       };
