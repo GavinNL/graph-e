@@ -108,6 +108,11 @@ public:
         return m_is_available;
     }
 
+    std::any & get_resource()
+    {
+        return m_resource;
+    }
+
     template<typename T>
     T & Get()
     {
@@ -182,9 +187,14 @@ public:
 
     out_resource & operator = ( T const & v )
     {
-        auto & G = get();
-        G = v;
-        return G;
+        m_node.lock()->get_resource() = v;
+        return *this;
+    }
+
+    out_resource & operator = ( T && v )
+    {
+        m_node.lock()->get_resource() = std::move(v);
+        return *this;
     }
 
     operator T&()
@@ -192,11 +202,18 @@ public:
         return get();
     }
 
+    template<typename _Tp, typename... _Args>
+    void emplace(_Args&&... __args)
+    {
+      typedef typename std::remove_const<_Tp>::type Node_t;
+
+      m_node.lock()->get_resource().emplace<_Tp>( std::forward<_Args>(__args)...);
+    }
+
     void set(T const & x, bool make_avail=true)
     {
-        get() = x;
+        m_node.lock()->get_resource() = x;
         if( make_avail) make_available();
-
     }
 };
 
@@ -363,7 +380,7 @@ public:
     {
         for(auto & N : m_exec_nodes)
         {
-            N->m_executed = false;
+            N->m_executed  = false;
             N->m_scheduled = false;
         }
         for(auto & N : m_resources)
