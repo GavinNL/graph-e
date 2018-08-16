@@ -142,21 +142,16 @@ protected:
     friend class ResourceRegistry;
     resource_node_w m_node;
 public:
+
+    /**
+     * @brief get
+     * @return
+     *
+     * Gets a reference to the resource.
+     */
     T & get()
     {
         return m_node.lock()->Get<T>();
-    }
-
-    in_resource & operator = ( T const & v )
-    {
-        auto & G = get();
-        G = v;
-        return G;
-    }
-
-    operator T&()
-    {
-        return get();
     }
 };
 
@@ -167,11 +162,24 @@ protected:
     friend class ResourceRegistry;
     resource_node_w m_node;
 public:
+
+    /**
+     * @brief get
+     * @return
+     *
+     * Returns a reference to the node. This will throw an exception
+     * if the resource has not either been emplaced() or set()
+     */
     T & get()
     {
         return m_node.lock()->Get<T>();//std::any_cast<T&>( m_node.lock()->m_resource );
     }
 
+    /**
+     * @brief make_available
+     * Makes this resource available. Once it is available, any ExecNodes
+     * which require this resource will be allowed to execute.
+     */
     void make_available()
     {
         auto node = m_node.lock();
@@ -185,23 +193,6 @@ public:
         }
     }
 
-    out_resource & operator = ( T const & v )
-    {
-        m_node.lock()->get_resource() = v;
-        return *this;
-    }
-
-    out_resource & operator = ( T && v )
-    {
-        m_node.lock()->get_resource() = std::move(v);
-        return *this;
-    }
-
-    operator T&()
-    {
-        return get();
-    }
-
     template<typename _Tp, typename... _Args>
     void emplace(_Args&&... __args)
     {
@@ -210,9 +201,22 @@ public:
       m_node.lock()->get_resource().emplace<_Tp>( std::forward<_Args>(__args)...);
     }
 
+    /**
+     * @brief set
+     * @param x
+     * @param make_avail
+     *
+     * Sets the resource
+     */
     void set(T const & x, bool make_avail=true)
     {
         m_node.lock()->get_resource() = x;
+        if( make_avail) make_available();
+    }
+
+    void set(T && x, bool make_avail=true)
+    {
+        m_node.lock()->get_resource() = std::move(x);
         if( make_avail) make_available();
     }
 };
