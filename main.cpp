@@ -25,7 +25,7 @@ static uint64_t time()
 
 //#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
 
-#define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
+#define WAIT(ms) //std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
 
 /**
@@ -66,6 +66,14 @@ thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
 #endif
 
 
+struct SpecialResource
+{
+    ~SpecialResource()
+    {
+       std::cout << "Special Resource::Destroyed"    << std::endl;
+    }
+};
+
 /**
  * @brief The Node0 class
  *
@@ -78,19 +86,18 @@ class Node0
 {
     public:
 
-    struct Data_t
-    {
-        // Node 0 will produce a resource named w and a resource named x.
-        Resource<int> w;
-        Resource<int> x;
-    };
+    out_resource<int> w;
+    out_resource<int> x;
 
+    out_resource<SpecialResource> z;
     /**
-     * @brief registerResources
-     * @param data
+     * @brief Node0
      * @param G
-     * This function is called when the node is added to the graph.
+     *
+     * This constructor is called when the node is added to the graph.
      * We will use this to create promises and future resources.
+     *
+     * The first parameter must be ResourceRegistry&
      *
      * A promise resource indicates that this Node will produce
      * the resource by the time it finishes executing.
@@ -98,27 +105,34 @@ class Node0
      * A Future resource is a required resource. This resoruce will
      * become available when another node has created it.
      */
-    void registerResources(Data_t & data, ResourceRegistry & G)
+    Node0(ResourceRegistry & G)
     {
-        // Node 0 will promise to create 2 int resources named w and x.
-        data.w = G.create_PromiseResource<int>("w");
-        data.x = G.create_PromiseResource<int>("x");
+        w = G.register_output_resource<int>("w");
+        x = G.register_output_resource<int>("x");
+
     }
 
-    void operator()(Data_t & G)
+
+    /**
+     * @brief operator ()
+     * When a node is ready to execute, it will call the () operator
+     *
+     * At this point all required resources should be met.
+     */
+    void operator()()
     {
         FOUT << "Node0 Start" << std::endl;
 
         WAIT(1000);
-        G.x.set(1);
-        G.x.make_available(); // make x available
+        x.set(1);
+        x.make_available(); // make x available
                               // at this point, if running in threaded mode, will
                               // schedule any nodes that only depend on x to run.
         FOUT <<  "x available" << std::endl;
 
         WAIT(1000);
-        G.w.set(3);
-        G.w.make_available(); // make w available.
+        w.set(3);
+        w.make_available(); // make w available.
         FOUT <<  "w available" << std::endl;
 
         FOUT << "Node0 Ended" << std::endl;
@@ -132,24 +146,21 @@ class Node1
 {
     public:
 
-    struct Data_t
-    {
-        Resource<int> y;
-    };
+    out_resource<int> y;
 
-    void registerResources(Data_t & data, ResourceRegistry & G)
+    Node1(ResourceRegistry & G)
     {
         // Node1 will promise to create resource y
-        data.y = G.create_PromiseResource<int>("y");
+        y = G.register_output_resource<int, resource_flags::permenant>("y");
     }
 
-    void operator()(Data_t & G)
+    void operator()()
     {
         FOUT << "Node1 Start" << std::endl;
 
         WAIT(750);
-        G.y.set(2);
-        G.y.make_available();
+        y.emplace(2);
+        y.make_available();
         FOUT <<  "y available" << std::endl;
 
         FOUT << "Node1 End" << std::endl;
@@ -161,33 +172,31 @@ class Node1
 class Node2
 {
     public:
-    struct Data_t
-    {
-        Resource<int> x;
-        Resource<int> y;
-        Resource<int> z;
-    };
 
-    void registerResources(Data_t & data, ResourceRegistry & G)
+    in_resource<int> x;
+    in_resource<int> y;
+    out_resource<int> z;
+
+    Node2(ResourceRegistry & G)
     {
         // Node 2 requires x and y to execute.
         // This means, Node 2 will only be scheduled once
         // node 0 has created x and node 1 has created y
-        data.x = G.create_FutureResource<int>("x"); // created by node 0
-        data.y = G.create_FutureResource<int>("y"); // created by node 1
+        x = G.register_input_resource<int>("x"); // created by node 0
+        y = G.register_input_resource<int, resource_flags::permenant>("y"); // created by node 1
 
         // given x and y, Node2 will produce z
-        data.z = G.create_PromiseResource<int>("z");
+        z = G.register_output_resource<int>("z");
     }
 
-    void operator()(Data_t & G)
+    void operator()()
     {
         FOUT << "Node2 Start" << std::endl;
 
         WAIT(250);
         //FOUT << "  z available: " << 5 << std::endl;
-        G.z.set(3);
-        G.z.make_available();
+        z.set(3);
+        z.make_available();
         FOUT <<  "z available" << std::endl;
 
         FOUT << "Node2 End" << std::endl;
@@ -199,22 +208,21 @@ class Node2
 class Node3
 {
     public:
-    struct Data_t
-    {
-        Resource<int> x;
-        Resource<int> w;
-        Resource<int> z;
-    };
 
-    void registerResources(Data_t & data, ResourceRegistry & G)
+    in_resource<int> x;
+    in_resource<int> w;
+    in_resource<int> z;
+
+
+    Node3( ResourceRegistry & G)
     {
         // Node 3 requires 3 resources. It does not produce any
-        data.x = G.create_FutureResource<int>("x");
-        data.w = G.create_FutureResource<int>("w");
-        data.z = G.create_FutureResource<int>("z");
+        x = G.register_input_resource<int>("x");
+        w = G.register_input_resource<int>("w");
+        z = G.register_input_resource<int>("z");
     }
 
-    void operator()(Data_t & G)
+    void operator()()
     {
         FOUT << "Node3 Start" << std::endl;
         WAIT(500);
@@ -227,18 +235,17 @@ class Node3
 class Node4
 {
     public:
-    struct Data_t
-    {
-        Resource<int> w;
-    };
 
-    void registerResources(Data_t & data, ResourceRegistry & G)
+    in_resource<int> w;
+
+
+    Node4(ResourceRegistry & G)
     {
         // node 4 needs 1 resource, w.
-        data.w = G.create_FutureResource<int>("w");
+        w = G.register_input_resource<int>("w");
     }
 
-    void operator()(Data_t & G)
+    void operator()()
     {
         FOUT << "Node4 started" << std::endl;
         WAIT(250);
@@ -251,7 +258,7 @@ class Node4
 
 int main(int argc, char **argv)
 {
-#define USE_THREAD_POOL
+   #define USE_THREAD_POOL
 
     node_graph G;
 
@@ -260,9 +267,10 @@ int main(int argc, char **argv)
 
     G.add_node<Node2>().set_name("Node_2"); // node added and constructed
     G.add_node<Node0>().set_name("Node_0"); // node added and constructed
-    G.add_node<Node1>().set_name("Node_1"); // node added and constructed
+    G.add_oneshot_node<Node1>().set_name("Node_1"); // node added and constructed
     G.add_node<Node4>().set_name("Node_4"); // node added and constructed
     G.add_node<Node3>().set_name("Node_3"); // node added and constructed
+
 
 
 #if defined USE_THREAD_POOL
@@ -291,7 +299,7 @@ int main(int argc, char **argv)
     //
     // It is the developers responsibility to make sure
     // the threadpool does not get destroyed before the executor
-    gnl::thread_pool T(3);
+    gnl::thread_pool T(4);
     ThreadPoolWrapper TW(T);
 
     threaded_executor<ThreadPoolWrapper> P(G);
@@ -303,9 +311,16 @@ int main(int argc, char **argv)
 
     // Execute the graph. If using the serial execute this will block
     // if using the threadpool
+
     P.execute();
+    #if defined USE_THREAD_POOL
+    P.wait();
+    #endif
+    G.print();
 
-
+    std::cout << "-----------------------------------" << std::endl;
+    G.reset();
+    P.execute();
     #if defined USE_THREAD_POOL
     P.wait();
     #endif
