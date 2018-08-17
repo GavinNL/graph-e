@@ -12,8 +12,8 @@ public:
 
     A( ResourceRegistry & G)
     {
-        b = G.register_output_resource<int>("b");
-        c = G.register_output_resource<int>("c");
+        b = G.register_output_resource<int, resource_flags::permanent>("b");
+        c = G.register_output_resource<int, resource_flags::permanent>("c");
     }
     void operator()()
     {
@@ -32,7 +32,7 @@ public:
 
     B( ResourceRegistry & G)
     {
-        b = G.register_input_resource<int>("b");
+        b = G.register_input_resource<int, resource_flags::permanent>("b");
     }
     void operator()()
     {
@@ -47,7 +47,7 @@ public:
 
     C( ResourceRegistry & G)
     {
-        c = G.register_input_resource<int>("c");
+        c = G.register_input_resource<int, resource_flags::permanent>("c");
     }
     void operator()()
     {
@@ -78,11 +78,11 @@ int main()
 {
   node_graph G;
 
-  G.add_node<A>().set_name("A");
+  G.add_oneshot_node<A>().set_name("A");
   G.add_node<B>().set_name("B");
   G.add_node<C>().set_name("C");
 
-  G.print();
+
 
   gnl::thread_pool T(4);   // create the threadpool with 4 workers
   ThreadPoolWrapper TW(T); // create the wrapper.
@@ -92,6 +92,8 @@ int main()
 
   Exec.execute(); // execute
   Exec.wait();  // If using a threadpool, we must call wait() to wait until all the threads have executed.
+
+  G.print();
 
   G.reset();      // reset the resources making them unavailable.
                   // this must be called if you wish to execute the graph again.

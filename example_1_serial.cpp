@@ -63,6 +63,13 @@ int main()
   G.print();
 
   serial_executor Exec(G);
+
+
+  Exec.execute();
+
+  G.reset();      // reset the resources making them unavailable.
+                  // this must be called if you wish to execute the graph again.
+
   Exec.execute();
 
   G.print();

@@ -206,15 +206,85 @@ int main()
     Exec.set_thread_pool(&TW); // set the threadpool wrapper
 
     Exec.execute(); // execute
+    Exec.wait();    // wait for the threads to finish
 
     G.print();
     return 0;
 }
 
 
-
-
-
-    P.execute();      // execute once
-    P.wait();         // must wait for all thread to finish.
 ```
+
+
+# Examples
+
+## Example 1: Serial Execution
+
+Simple serial execution of 3 nodes.
+
+## Example 2: Threadpool
+
+Same as example 1 but uses a thread pool
+
+## Example 3: One-Shot node and Permanent Resources
+
+A One-Shot node is executed only once and then removed from the graph. A One-Shot node can only produce Permanent resources.
+A permanent resource is a resource that will not be reset when reset() is called and continues to exist until the Graph is destroyed.
+
+In this example we set up node A to be a one-shot node, producing permanent resources b and c. Once we execute the graph once, Node
+A is no longer needed and is deleted. On the second run, we see that Node A is not executed.
+
+![Alt text](https://g.gravizo.com/svg?
+digraph G {
+0 -> 43 -> 500163
+ {
+   rank=same 
+   A[shape=square]
+   0
+}
+ {
+   rank=same 
+   B[shape=square]
+   43
+}
+ {
+   rank=same 
+   C[shape=square]
+   500163
+}
+ { rank=same 
+b [shape=circle style=filled  color="0.650 0.700 0.700"]
+}
+ { rank=same 
+c [shape=circle style=filled  color="0.650 0.700 0.700"]
+}
+A -> b
+A -> c
+b -> B
+c -> C
+}
+)
+
+![Alt text](https://g.gravizo.com/svg?
+digraph G {
+0 -> 44
+ {
+   rank=same 
+   B[shape=square]
+   0
+}
+ {
+   rank=same 
+   C[shape=square]
+   44
+}
+ { rank=same 
+b [shape=circle style=filled  color="0.650 0.700 0.700"]
+}
+ { rank=same 
+c [shape=circle style=filled  color="0.650 0.700 0.700"]
+}
+b -> B
+c -> C
+}
+)

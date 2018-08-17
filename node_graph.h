@@ -37,7 +37,7 @@ enum class node_flags
 enum class resource_flags
 {
     resetable,   // resource can be reset
-    permenant,   // resource is created once and never reset, even after reset() is called.
+    permanent,   // resource is created once and never reset, even after reset() is called.
     moveable,    // resource is moved from one ExecNode to another. Only one ExecNode can use it as an input.
 };
 
@@ -533,7 +533,7 @@ public:
           for( auto & r : N->m_producedResources)
           {
               auto R = r.lock();
-              if( R->get_flags() != resource_flags::permenant )
+              if( R->get_flags() != resource_flags::permanent )
               {
 
                 throw std::runtime_error( std::string("Node, set as ExecuteOnce, but produces resettable resource, ") + R->get_name() + std::string(". Nodes set as ExecuteOnce may only produce permenant resources.") );
@@ -589,7 +589,7 @@ public:
 
         for(auto & N : m_resources)
         {
-            if( N.second->get_flags() != resource_flags::permenant)
+            if( N.second->get_flags() != resource_flags::permanent)
             {
                 std::cout <<  N.second->get_name() << " reset" << std::endl;
                 N.second->make_available(false);
@@ -652,7 +652,7 @@ public:
         }
         for(auto & E : m_resources)
         {
-            if(E.second->get_flags() == resource_flags::permenant) continue;
+            if(E.second->get_flags() == resource_flags::permanent) continue;
 
             auto c = E.second->m_time_available;// - min;
             nodes[c] = 0;
@@ -687,7 +687,7 @@ public:
             std::cout << " { rank=same " << std::endl;
             std::cout <<  E.second->get_name() << " [shape=circle style=filled  color=\"0.650 0.700 0.700\"]" << std::endl;
 
-            if( E.second->get_flags() != resource_flags::permenant) std::cout <<  c  << std::endl;
+            if( E.second->get_flags() != resource_flags::permanent) std::cout <<  c  << std::endl;
             std::cout << "}" << std::endl;
         }
 
