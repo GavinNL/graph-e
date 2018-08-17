@@ -25,7 +25,7 @@ static uint64_t time()
 
 //#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
 
-#define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
+#define WAIT(ms) //std::this_thread::sleep_for(std::chrono::milliseconds(ms))
 
 
 /**
@@ -66,6 +66,14 @@ thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
 #endif
 
 
+struct SpecialResource
+{
+    ~SpecialResource()
+    {
+       std::cout << "Special Resource::Destroyed"    << std::endl;
+    }
+};
+
 /**
  * @brief The Node0 class
  *
@@ -81,7 +89,7 @@ class Node0
     out_resource<int> w;
     out_resource<int> x;
 
-
+    out_resource<SpecialResource> z;
     /**
      * @brief Node0
      * @param G
@@ -101,6 +109,7 @@ class Node0
     {
         w = G.register_output_resource<int>("w");
         x = G.register_output_resource<int>("x");
+
     }
 
 
@@ -142,7 +151,7 @@ class Node1
     Node1(ResourceRegistry & G)
     {
         // Node1 will promise to create resource y
-        y = G.register_output_resource<int>("y");
+        y = G.register_output_resource<int, resource_flags::permenant>("y");
     }
 
     void operator()()
@@ -150,7 +159,7 @@ class Node1
         FOUT << "Node1 Start" << std::endl;
 
         WAIT(750);
-        y.set(2);
+        y.emplace(2);
         y.make_available();
         FOUT <<  "y available" << std::endl;
 
@@ -174,7 +183,7 @@ class Node2
         // This means, Node 2 will only be scheduled once
         // node 0 has created x and node 1 has created y
         x = G.register_input_resource<int>("x"); // created by node 0
-        y = G.register_input_resource<int>("y"); // created by node 1
+        y = G.register_input_resource<int, resource_flags::permenant>("y"); // created by node 1
 
         // given x and y, Node2 will produce z
         z = G.register_output_resource<int>("z");
@@ -249,7 +258,7 @@ class Node4
 
 int main(int argc, char **argv)
 {
-#define USE_THREAD_POOL
+   #define USE_THREAD_POOL
 
     node_graph G;
 
@@ -258,9 +267,10 @@ int main(int argc, char **argv)
 
     G.add_node<Node2>().set_name("Node_2"); // node added and constructed
     G.add_node<Node0>().set_name("Node_0"); // node added and constructed
-    G.add_node<Node1>().set_name("Node_1"); // node added and constructed
+    G.add_oneshot_node<Node1>().set_name("Node_1"); // node added and constructed
     G.add_node<Node4>().set_name("Node_4"); // node added and constructed
     G.add_node<Node3>().set_name("Node_3"); // node added and constructed
+
 
 
 #if defined USE_THREAD_POOL
@@ -289,7 +299,7 @@ int main(int argc, char **argv)
     //
     // It is the developers responsibility to make sure
     // the threadpool does not get destroyed before the executor
-    gnl::thread_pool T(3);
+    gnl::thread_pool T(4);
     ThreadPoolWrapper TW(T);
 
     threaded_executor<ThreadPoolWrapper> P(G);
@@ -301,9 +311,16 @@ int main(int argc, char **argv)
 
     // Execute the graph. If using the serial execute this will block
     // if using the threadpool
+
     P.execute();
+    #if defined USE_THREAD_POOL
+    P.wait();
+    #endif
+    G.print();
 
-
+    std::cout << "-----------------------------------" << std::endl;
+    G.reset();
+    P.execute();
     #if defined USE_THREAD_POOL
     P.wait();
     #endif

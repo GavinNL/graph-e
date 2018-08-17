@@ -8,7 +8,7 @@
 #include <mutex>
 #include <functional>
 #include <thread>
-
+#include <algorithm>
 #include <map>
 #include <vector>
 #include <queue>
@@ -25,6 +25,21 @@ using exec_node_p     = std::shared_ptr<exec_node>;
 using resource_node_p = std::shared_ptr<resource_node>;
 using exec_node_w      = std::weak_ptr<exec_node>;
 using resource_node_w  = std::weak_ptr<resource_node>;
+
+enum class node_flags
+{
+    execute_once,  // node will only execute once. Even after reset() is called, this node will not execute
+                   // nodes of this type must produce One_Shot resources.
+    execute_multiple
+
+};
+
+enum class resource_flags
+{
+    resetable,   // resource can be reset
+    permenant,    // resource is created once and never reset, even after reset() is called.
+    moveable,    // resource is moved from one ExecNode to another. Only one ExecNode can use it as an input.
+};
 
 /**
  * @brief The exec_node class
@@ -46,13 +61,18 @@ protected:
     node_graph * m_Graph; // the parent graph;
 
     duration     m_exec_start_time_us;            // the time at which this node was executed
-    uint32_t     m_resourceCount = 0;
+//    uint32_t     m_resourceCount = 0;
 
+    node_flags   m_flags;
     std::vector<resource_node_w> m_requiredResources; // a list of required resources
     std::vector<resource_node_w> m_producedResources; // a list of required resources
 
 
 public:
+    ~exec_node()
+    {
+        std::cout << "Node Destroyed: " << m_name << std::endl;
+    }
     std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
     // nudge the exec_node to check whether all its resources are available.
@@ -76,6 +96,12 @@ public:
     void set_name(const std::string & name) {
         m_name = name;
     }
+
+    node_flags get_flags() const
+    {
+        return m_flags;
+    }
+
 };
 
 /**
@@ -93,14 +119,26 @@ protected:
     std::string              m_name;
     std::vector<exec_node_w> m_Nodes; // list of nodes that must be triggered
                                      // when resource becomes availabe
-    bool m_is_available = false;
+    bool                     m_is_available = false;
+    resource_flags           m_flags;
+
 
 public:
     duration m_time_available;
+
+    ~resource_node()
+    {
+
+    }
     void make_available(bool av = true)
     {
         m_is_available = av;
         m_time_available = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
+    }
+
+    resource_flags get_flags() const
+    {
+        return m_flags;
     }
 
     bool is_available() const
@@ -187,18 +225,19 @@ public:
         {
             if( !node->is_available() )
             {
+                std::cout << node->get_name() << " is available" << std::endl;
                 node->make_available();
                 node->notify_dependents();
             }
         }
     }
 
-    template<typename _Tp, typename... _Args>
+    template<typename... _Args>
     void emplace(_Args&&... __args)
     {
-      typedef typename std::remove_const<_Tp>::type Node_t;
+      typedef typename std::remove_const<T>::type Node_t;
 
-      m_node.lock()->get_resource().emplace<_Tp>( std::forward<_Args>(__args)...);
+      m_node.lock()->get_resource().emplace<T>( std::forward<_Args>(__args)...);
     }
 
     /**
@@ -221,6 +260,9 @@ public:
     }
 };
 
+
+
+
 class ResourceRegistry
 {
     std::map<std::string, resource_node_p> & m_resources;
@@ -238,14 +280,16 @@ class ResourceRegistry
 
         }
 
-        template<typename T>
+        template<typename T, resource_flags F=resource_flags::resetable>
         out_resource<T> register_output_resource(const std::string & name)
         {
             if( m_resources.count(name) == 0 )
             {
                 resource_node_p RN = std::make_shared< resource_node >();
-                RN->m_resource      = std::make_any<T>();
-                RN->m_name          = name;
+
+                RN->m_name     = name;
+                RN->m_flags    = F;
+
                 m_Node->m_producedResources.push_back(RN);
                 m_resources[name] = RN;
 
@@ -257,21 +301,29 @@ class ResourceRegistry
             else
             {
                 out_resource<T> r;
+
+
                 r.m_node = m_resources.at(name);
+                if(r.m_node.lock()->m_flags != F)
+                {
+                    throw std::runtime_error(std::string("Resource ") + name + std::string(" previously registered as different type") );
+                }
                 m_Node->m_producedResources.push_back( r.m_node);
+
                 return r;
             }
         }
 
-        template<typename T>
+        template<typename T, resource_flags F=resource_flags::resetable>
         in_resource<T> register_input_resource(const std::string & name)
         {
             if( m_resources.count(name) == 0 )
             {
                 resource_node_p RN = std::make_shared<resource_node>();
-                RN->m_resource      = std::make_any<T>();
+
                 RN->m_Nodes.push_back(m_Node);
                 RN->m_name = name;
+                RN->m_flags = F;
                 m_resources[name] = RN;
 
                 in_resource<T> r;
@@ -288,6 +340,10 @@ class ResourceRegistry
 
                 in_resource<T> r;
                 r.m_node = RN;
+                if(r.m_node.lock()->m_flags != F)
+                {
+                    throw std::runtime_error(std::string("Resource ") + name + std::string(" previously registered as different type") );
+                }
 
                 m_required_resources.push_back(RN);
 
@@ -303,6 +359,22 @@ public:
     node_graph() {}
     ~node_graph()
     {
+
+        std::sort( m_exec_nodes.begin(), m_exec_nodes.end(),
+                   [](exec_node_p & l, exec_node_p & r)
+        {
+            return l->m_exec_start_time_us < r->m_exec_start_time_us;
+        });
+
+        for(auto & e : m_exec_nodes)
+        {
+            std::cout << e->get_name() << " use count: " << e.use_count() << "  time: " << e->m_exec_start_time_us.count() << std::endl;
+        }
+
+        while(m_exec_nodes.size())
+        {
+            m_exec_nodes.pop_back();
+        }
     }
 
     node_graph( node_graph const & other) = delete;
@@ -311,6 +383,17 @@ public:
     node_graph & operator = ( node_graph && other) = delete;
 
 
+    template<typename _Tp, typename... _Args>
+    inline exec_node & add_oneshot_node(_Args&&... __args)
+    {
+        return add_node_flags<node_flags::execute_once,_Tp>( std::forward<_Args>(__args)... );
+    }
+
+    template<typename _Tp, typename... _Args>
+    inline exec_node & add_node(_Args&&... __args)
+    {
+        return add_node_flags<node_flags::execute_multiple,_Tp>( std::forward<_Args>(__args)... );
+    }
     /**
      * @brief AddNode
      * @param __args
@@ -318,17 +401,18 @@ public:
      * Add a node to the Graph. The template class _Tp must contain a struct
      * named Data_t.
      */
-    template<typename _Tp, typename... _Args>
-    inline exec_node & add_node(_Args&&... __args)
+    template<node_flags F, typename _Tp, typename... _Args>
+    inline exec_node & add_node_flags(_Args&&... __args)
     {
       typedef typename std::remove_const<_Tp>::type Node_t;
 
       exec_node_p N   = std::make_shared<exec_node>();
 
+      N->m_flags = F;
       ResourceRegistry R(N,  m_resources,  N->m_requiredResources);
 
-      N->m_NodeClass = std::make_any<Node_t>( R, std::forward<_Args>(__args)...);
-     // N->m_NodeData  = std::make_any<Data_t>();
+      N->m_NodeClass.emplace<Node_t>( R, std::forward<_Args>(__args)...);
+
       N->m_name      = typeid( _Tp).name();// "Node_" + std::to_string(global_count++);
       exec_node* rawp = N.get();
       rawp->m_Graph  = this;
@@ -344,6 +428,15 @@ public:
               {                              // if we have acquired the lock, execute the node
                   rawp->m_executed = true;
                   rawp->m_exec_start_time_us = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
+
+                  std::cout << "Executing: " << rawp->m_name << std::endl;
+                  for(auto & r : rawp->m_requiredResources)
+                  {
+                      auto R = r.lock();
+                      std::cout <<  "  " << R->get_name() << "  available: " << R->is_available() << std::endl;
+                  }
+
+
                   std::any_cast< Node_t&>( rawp->m_NodeClass )();
                   --rawp->m_Graph->m_numToExecute;
                   rawp->m_mutex.unlock();
@@ -360,6 +453,18 @@ public:
           }
       };
 
+      if( F == node_flags::execute_once)
+      {
+          for( auto & r : N->m_producedResources)
+          {
+              auto R = r.lock();
+              if( R->get_flags() != resource_flags::permenant )
+              {
+
+                throw std::runtime_error( std::string("Node, set as ExecuteOnce, but produces resettable resource, ") + R->get_name() + std::string(". Nodes set as ExecuteOnce may only produce permenant resources.") );
+              }
+          }
+      }
 
       //std::any_cast< Node_t&>(N->m_NodeClass).registerResources( std::any_cast< Data_t&>( rawp->m_NodeData ), R);
 
@@ -382,14 +487,43 @@ public:
      */
     void reset(bool destroy_resources = false)
     {
-        for(auto & N : m_exec_nodes)
-        {
-            N->m_executed  = false;
-            N->m_scheduled = false;
-        }
+    //    for(auto & N : m_exec_nodes)
+    //    {
+    //        N->m_executed  = false;
+    //        N->m_scheduled = false;
+    //
+    //        if(N->get_flags() == node_flags::execute_once)
+    //        {
+    //            N.reset();
+    //        }
+    //    }
+
+        m_exec_nodes.erase(std::remove_if(m_exec_nodes.begin(),
+                                  m_exec_nodes.end(),
+                                  [](exec_node_p & x)
+                                  {
+                                      x->m_executed  = false;
+                                      x->m_scheduled = false;
+                                      //x->m_resourceCount = 0;
+                                      std::cout << "Clearing " << x->m_name << std::endl;
+
+                                      if(x->get_flags() == node_flags::execute_once)
+                                      {
+                                          x.reset();
+                                          return true;
+                                      }
+                                      return false;
+                                  }),
+                   m_exec_nodes.end());
+
+
         for(auto & N : m_resources)
         {
-            N.second->make_available(false);
+            if( N.second->get_flags() != resource_flags::permenant)
+            {
+                std::cout <<  N.second->get_name() << " reset" << std::endl;
+                N.second->make_available(false);
+            }
         }
     }
 
@@ -439,6 +573,8 @@ public:
         }
         for(auto & E : m_resources)
         {
+            if(E.second->get_flags() == resource_flags::permenant) continue;
+
             auto c = E.second->m_time_available;// - min;
             nodes[c] = 0;
         }
@@ -458,9 +594,9 @@ public:
             E->m_exec_start_time_us -= min;
             auto c = E->m_exec_start_time_us.count();
 
-            std::cout << " { rank=same " << std::endl;
-            std::cout <<  E->m_name << " [shape=square]" << std::endl;
-            std::cout <<  c  << std::endl;
+            std::cout << " {\n   rank=same " << std::endl;
+            std::cout << "   " <<  E->m_name << " [shape=square]" << std::endl;
+            std::cout << "   " <<  c  << std::endl;
             std::cout << "}" << std::endl;
 
         }
@@ -470,10 +606,10 @@ public:
             auto c = E.second->m_time_available.count();// - min;
 
             std::cout << " { rank=same " << std::endl;
-            std::cout <<  E.second->get_name() << " [shape=circle]" << std::endl;
-            std::cout <<  c  << std::endl;
-            std::cout << "}" << std::endl;
+            std::cout <<  E.second->get_name() << " [shape=circle style=filled  color=\"0.650 0.700 0.700\"]" << std::endl;
 
+            if( E.second->get_flags() != resource_flags::permenant) std::cout <<  c  << std::endl;
+            std::cout << "}" << std::endl;
         }
 
         for(auto & E : m_exec_nodes)
@@ -502,7 +638,6 @@ public:
     }
 protected:
 
-
     std::vector< exec_node_p >             m_exec_nodes;
     std::map<std::string, resource_node_p> m_resources;
 
@@ -516,8 +651,7 @@ public:
 
 inline void exec_node::trigger()
 {
-    ++m_resourceCount;
-    if( m_resourceCount >= m_requiredResources.size())
+    if( can_execute() )
     {
         if(!m_scheduled)
         {
