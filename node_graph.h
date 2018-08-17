@@ -28,8 +28,8 @@ using resource_node_w  = std::weak_ptr<resource_node>;
 
 enum class node_flags
 {
-    execute_once,  // node will only execute once. Even after reset() is called, this node will not execute
-                   // nodes of this type must produce One_Shot resources.
+    execute_once,     // node will only execute once. Even after reset() is called, this node will not execute
+                      // nodes of this type must produce One_Shot resources.
     execute_multiple
 
 };
@@ -37,7 +37,7 @@ enum class node_flags
 enum class resource_flags
 {
     resetable,   // resource can be reset
-    permenant,    // resource is created once and never reset, even after reset() is called.
+    permenant,   // resource is created once and never reset, even after reset() is called.
     moveable,    // resource is moved from one ExecNode to another. Only one ExecNode can use it as an input.
 };
 
@@ -61,7 +61,8 @@ protected:
     node_graph * m_Graph; // the parent graph;
 
     duration     m_exec_start_time_us;            // the time at which this node was executed
-//    uint32_t     m_resourceCount = 0;
+
+    std::thread::id m_thread_id;                  // the id of the thread that executed this.
 
     node_flags   m_flags;
     std::vector<resource_node_w> m_requiredResources; // a list of required resources
@@ -69,14 +70,21 @@ protected:
 
 
 public:
-    ~exec_node()
-    {
-        std::cout << "Node Destroyed: " << m_name << std::endl;
-    }
     std::function<void(void)> execute; // Function object to execute the Node's () operator.
 
-    // nudge the exec_node to check whether all its resources are available.
-    // if they are, then tell the execution_graph_base to schedule its execution
+
+    ~exec_node()
+    {
+    //    std::cout << "Node Destroyed: " << m_name << std::endl;
+    }
+
+
+    /**
+     * @brief trigger
+     *
+     * Nudge the exec_node to check whether all its resource are available. If it is available
+     * execute the call
+     */
     void trigger();
 
     /**
@@ -130,6 +138,14 @@ public:
     {
 
     }
+
+    /**
+     * @brief make_available
+     * @param av
+     *
+     * Makes the resource available to other nodes. If this resource is needed by another node, that node
+     * will be scheduled for execution so long as all other required resources are satisfied
+     */
     void make_available(bool av = true)
     {
         m_is_available = av;
@@ -141,16 +157,35 @@ public:
         return m_flags;
     }
 
+    /**
+     * @brief is_available
+     * @return
+     *
+     * Returns true if this resource is available
+     */
     bool is_available() const
     {
         return m_is_available;
     }
 
+    /**
+     * @brief get_resource
+     * @return
+     *
+     * Gets a reference to the resource.
+     */
     std::any & get_resource()
     {
         return m_resource;
     }
 
+    /**
+     * @brief Get
+     * @return
+     *
+     * Gets a reference to the resource cast to the particular type. Throws an
+     * exception of the resource has not been created
+     */
     template<typename T>
     T & Get()
     {
@@ -162,6 +197,11 @@ public:
         return m_name;
     }
 
+    /**
+     * @brief notify_dependents
+     *
+     * Notify all nodes waiting on this resource that this resource is available.
+     */
     void notify_dependents()
     {
         for(auto & N : m_Nodes)
@@ -173,6 +213,11 @@ public:
 };
 
 
+/**
+ * @brief The in_resource class
+ *
+ * Class used to register an input resource.
+ */
 template<typename T>
 class in_resource
 {
@@ -193,6 +238,11 @@ public:
     }
 };
 
+/**
+ * @brief The out_resource class
+ *
+ * Class for outgoing resources.
+ */
 template<typename T>
 class out_resource
 {
@@ -232,6 +282,12 @@ public:
         }
     }
 
+    /**
+     * @brief emplace
+     * @param __args
+     *
+     * Construct the resource in place
+     */
     template<typename... _Args>
     void emplace(_Args&&... __args)
     {
@@ -384,11 +440,27 @@ public:
 
 
     template<typename _Tp, typename... _Args>
+    /**
+     * @brief add_oneshot_node
+     * @param __args
+     * @return
+     *
+     * Add a one-shot node to the graph. A one-shot node only executes once.
+     *
+     * A one-shot nodemay only register "permanent" resources.
+     */
     inline exec_node & add_oneshot_node(_Args&&... __args)
     {
         return add_node_flags<node_flags::execute_once,_Tp>( std::forward<_Args>(__args)... );
     }
 
+    /**
+     * @brief add_node
+     * @param __args
+     * @return
+     *
+     * Add a regular exec node to the graph
+     */
     template<typename _Tp, typename... _Args>
     inline exec_node & add_node(_Args&&... __args)
     {
@@ -436,8 +508,11 @@ public:
                       std::cout <<  "  " << R->get_name() << "  available: " << R->is_available() << std::endl;
                   }
 
-
+                  rawp->m_thread_id = std::this_thread::get_id();
+                  //======== Exectue ========================
                   std::any_cast< Node_t&>( rawp->m_NodeClass )();
+                  //==========================================
+
                   --rawp->m_Graph->m_numToExecute;
                   rawp->m_mutex.unlock();
 
@@ -473,7 +548,12 @@ public:
       return *N;
     }
 
-
+    /**
+     * @brief schedule_node
+     * @param p
+     *
+     * Schedules this node for execution.
+     */
     void schedule_node( exec_node * p)
     {
         ++m_numToExecute;
@@ -487,16 +567,6 @@ public:
      */
     void reset(bool destroy_resources = false)
     {
-    //    for(auto & N : m_exec_nodes)
-    //    {
-    //        N->m_executed  = false;
-    //        N->m_scheduled = false;
-    //
-    //        if(N->get_flags() == node_flags::execute_once)
-    //        {
-    //            N.reset();
-    //        }
-    //    }
 
         m_exec_nodes.erase(std::remove_if(m_exec_nodes.begin(),
                                   m_exec_nodes.end(),
@@ -565,11 +635,30 @@ public:
     void print()
     {
 
+        std::string color[] =
+        {
+            std::string("[shape=square style=filled  color=\"0.000 0.000 1.000\"] "),
+            std::string("[shape=square style=filled  color=\"0.000 1.000 1.000\"] "),
+            std::string("[shape=square style=filled  color=\"0.000 1.000 0.000\"] "),
+            std::string("[shape=square style=filled  color=\"1.000 0.000 1.000\"] "),
+            std::string("[shape=square style=filled  color=\"1.000 0.000 0.000\"] "),
+            std::string("[shape=square style=filled  color=\"1.000 1.000 0.000\"] ")
+        };
+
+        std::map<std::thread::id, int> threadProps;
         std::map<duration, int> nodes;
+
+        int i=0;
         for(auto & E : m_exec_nodes)
         {
             auto c = E->m_exec_start_time_us;// - min;
             nodes[c] = 0;
+
+            auto id = E->m_thread_id;
+            if( threadProps.count(id) == 0)
+            {
+                threadProps[id] = i++;
+            }
         }
         for(auto & E : m_resources)
         {
@@ -595,7 +684,7 @@ public:
             auto c = E->m_exec_start_time_us.count();
 
             std::cout << " {\n   rank=same " << std::endl;
-            std::cout << "   " <<  E->m_name << " [shape=square]" << std::endl;
+            std::cout << "   " <<  E->m_name << color[ threadProps[E->m_thread_id]] << std::endl;
             std::cout << "   " <<  c  << std::endl;
             std::cout << "}" << std::endl;
 
