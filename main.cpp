@@ -1,5 +1,4 @@
-#include "threaded_executor.h"
-#include "serial_executor.h"
+
 
 #include <memory>
 #include <iostream>
@@ -7,64 +6,35 @@
 #include <string>
 #include <sstream>
 
-// Thread pool class from
-#include <gnl/gnl_threadpool.h>
-
 #include <sstream>
 #include <iostream>
 #include <iomanip>
 
 
-uint32_t global_thread_count=0;
+//==============================================================================
+// Uncomment this line to use in threaded mode
+//==============================================================================
+// #define USE_THREAD_POOL
+//==============================================================================
 
-static uint64_t time()
-{
-    static auto global_start = std::chrono::system_clock::now();
-    return std::chrono::duration_cast< std::chrono::microseconds>(std::chrono::system_clock::now() - global_start).count();
-}
+// the main header to include
+#include "node_graph.h"
 
-//#define FOUT tout << std::setw(8) << time().count() << ": " << std::string( 40*thread_number, ' ')
+// Serial executor to execute the graph on a single thread.
+#include "serial_executor.h"
 
-#define WAIT(ms) //std::this_thread::sleep_for(std::chrono::milliseconds(ms))
-
-
-/**
-  If USE_FILE_OUTPUT is defined. Each thread will print to it's own file. To visualize the flow of the
-  node calls. Use the following command from bash
-
-  cat thread_* | sort -n
-
-  This will concatentate all the logs into a file to visualize the thread execution. The time
-  stamps are in microseconds
-
-  //------
-       2:                                                Node1 Start
-       4:        Node0 Start
-  750106:                                                y available
-  750129:                                                Node1 End
- 1000104:        x available
- 1000184:                                                                                        Node2 Start
- 1250266:                                                                                        z available
- 1250288:                                                                                        Node2 End
- 2000226:        w available
- 2000228:                                                Node4 started
- 2000247:                                                                                        Node3 Start
- 2000250:        Node0 Ended
- 2250342:                                                Node4 ended
- 2500336:                                                                                        Node3 end
-
-  //------
-  **/
-#define USE_FILE_OUTPUT
-
-#if defined USE_FILE_OUTPUT
-thread_local uint32_t thread_number = global_thread_count++;
-thread_local std::ofstream tout("thread_" + std::to_string(thread_number++));
-#define FOUT tout << std::setw(8) << time() << ": " << std::string( 40*thread_number, ' ')
-#else
-#define FOUT std::cout << std::setw(8) << time() << ": " << std::string( 40*thread_number, ' ')
+// Threaded executor to execute the graph in threaded mode.
+// A threadpool class should be used. This example uses
+// gnl_threadpool
+#if defined USE_THREAD_POOL
+ #include "gnl/gnl_threadpool.h"
+ #include "threaded_executor.h"
 #endif
 
+
+#define WAIT(ms) std::this_thread::sleep_for(std::chrono::milliseconds(ms))
+
+#define FOUT std::cout
 
 struct SpecialResource
 {
@@ -258,7 +228,7 @@ class Node4
 
 int main(int argc, char **argv)
 {
-   #define USE_THREAD_POOL
+
 
     node_graph G;
 
@@ -305,27 +275,23 @@ int main(int argc, char **argv)
     threaded_executor<ThreadPoolWrapper> P(G);
     P.set_thread_pool(&TW);
 
+
+    P.execute();      // execute once
+    P.wait();         // must wait for all thread to finish.
+    G.reset();        // Reset. All resources are reset, except for permenant resources
+
+
+    P.execute();      // execute again
+    P.wait();         // must wait for all thread to finish.
 #else
+
     serial_executor P(G);
+
+    P.execute();    // execute once
+    G.reset();      // Reset. All resources are reset, except for permenant resources
+    P.execute();    // execute again
+
 #endif
-
-    // Execute the graph. If using the serial execute this will block
-    // if using the threadpool
-
-    P.execute();
-    #if defined USE_THREAD_POOL
-    P.wait();
-    #endif
-    G.print();
-
-    std::cout << "-----------------------------------" << std::endl;
-    G.reset();
-    P.execute();
-    #if defined USE_THREAD_POOL
-    P.wait();
-    #endif
-
-    //==================================
 
     // Pring the graph is dot format.
     // Copy and paste the output in a dot renderer: http://www.webgraphviz.com/
