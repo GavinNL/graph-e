@@ -275,7 +275,7 @@ public:
         {
             if( !node->is_available() )
             {
-                std::cout << node->get_name() << " is available" << std::endl;
+                //std::cout << node->get_name() << " is available" << std::endl;
                 node->make_available();
                 node->notify_dependents();
             }
@@ -424,7 +424,7 @@ public:
 
         for(auto & e : m_exec_nodes)
         {
-            std::cout << e->get_name() << " use count: " << e.use_count() << "  time: " << e->m_exec_start_time_us.count() << std::endl;
+            //std::cout << e->get_name() << " use count: " << e.use_count() << "  time: " << e->m_exec_start_time_us.count() << std::endl;
         }
 
         while(m_exec_nodes.size())
@@ -501,12 +501,12 @@ public:
                   rawp->m_executed = true;
                   rawp->m_exec_start_time_us = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
 
-                  std::cout << "Executing: " << rawp->m_name << std::endl;
-                  for(auto & r : rawp->m_requiredResources)
-                  {
-                      auto R = r.lock();
-                      std::cout <<  "  " << R->get_name() << "  available: " << R->is_available() << std::endl;
-                  }
+                  //std::cout << "Executing: " << rawp->m_name << std::endl;
+                  //for(auto & r : rawp->m_requiredResources)
+                  //{
+                  //    auto R = r.lock();
+                  //    std::cout <<  "  " << R->get_name() << "  available: " << R->is_available() << std::endl;
+                  //}
 
                   rawp->m_thread_id = std::this_thread::get_id();
                   //======== Exectue ========================
@@ -575,7 +575,7 @@ public:
                                       x->m_executed  = false;
                                       x->m_scheduled = false;
                                       //x->m_resourceCount = 0;
-                                      std::cout << "Clearing " << x->m_name << std::endl;
+                                      //std::cout << "Clearing " << x->m_name << std::endl;
 
                                       if(x->get_flags() == node_flags::execute_once)
                                       {
@@ -635,16 +635,6 @@ public:
     void print()
     {
 
-        std::string color[] =
-        {
-            std::string("[shape=square style=filled  color=\"0.000 0.000 1.000\"] "),
-            std::string("[shape=square style=filled  color=\"0.000 1.000 1.000\"] "),
-            std::string("[shape=square style=filled  color=\"0.000 1.000 0.000\"] "),
-            std::string("[shape=square style=filled  color=\"1.000 0.000 1.000\"] "),
-            std::string("[shape=square style=filled  color=\"1.000 0.000 0.000\"] "),
-            std::string("[shape=square style=filled  color=\"1.000 1.000 0.000\"] ")
-        };
-
         std::map<std::thread::id, int> threadProps;
         std::map<duration, int> nodes;
 
@@ -684,7 +674,7 @@ public:
             auto c = E->m_exec_start_time_us.count();
 
             std::cout << " {\n   rank=same " << std::endl;
-            std::cout << "   " <<  E->m_name << color[ threadProps[E->m_thread_id]] << std::endl;
+            std::cout << "   " <<  E->m_name << "[shape=square]" << std::endl;
             std::cout << "   " <<  c  << std::endl;
             std::cout << "}" << std::endl;
 
