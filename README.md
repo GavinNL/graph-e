@@ -1,4 +1,4 @@
-# Executable Node Graph
+# Graph-E: Graph Execute
 
 Imagine 3 processes, A, B and C. Process A produces two resources, b and c.
 Process B takes resource b and performs some additional computation. Process C
