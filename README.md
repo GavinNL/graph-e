@@ -23,6 +23,8 @@ The above example can be seen in code here.
 #include "node_graph.h"
 #include "serial_executor.h"
 
+using namespace graphe;
+
 class A
 {
 public:
