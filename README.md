@@ -1,7 +1,8 @@
 # Executable Node Graph
 
-Imagine 3 processes, A, B and C. Process B takes resource b and performs some
-additional computation. Process C takes resource c and does some computation.
+Imagine 3 processes, A, B and C. Process A produces two resources, b and c.
+Process B takes resource b and performs some additional computation. Process C
+takes resource c and does some computation.
 
 A simple graph of the execution might look like this.
 
