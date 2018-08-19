@@ -1,6 +1,6 @@
 #include <iostream>
-#include "node_graph.h"
-#include "serial_executor.h"
+#include "graph-e/node_graph.h"
+#include "graph-e/serial_executor.h"
 
 class A
 {

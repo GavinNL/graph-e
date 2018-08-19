@@ -1,6 +1,6 @@
 #include <iostream>
-#include "node_graph.h"
-#include "threaded_executor.h"
+#include "graph-e/node_graph.h"
+#include "graph-e/threaded_executor.h"
 
 #include "gnl/gnl_threadpool.h"
 
