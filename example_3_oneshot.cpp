@@ -7,13 +7,13 @@
 class A
 {
 public:
-    out_resource<int> b;
-    out_resource<int> c;
+    graphe::out_resource<int> b;
+    graphe::out_resource<int> c;
 
-    A( ResourceRegistry & G)
+    A( graphe::ResourceRegistry & G)
     {
-        b = G.register_output_resource<int, resource_flags::permanent>("b");
-        c = G.register_output_resource<int, resource_flags::permanent>("c");
+        b = G.register_output_resource<int, graphe::resource_flags::permanent>("b");
+        c = G.register_output_resource<int, graphe::resource_flags::permanent>("c");
     }
     void operator()()
     {
@@ -29,11 +29,11 @@ public:
 class B
 {
 public:
-    in_resource<int> b;
+    graphe::in_resource<int> b;
 
-    B( ResourceRegistry & G)
+    B( graphe::ResourceRegistry & G)
     {
-        b = G.register_input_resource<int, resource_flags::permanent>("b");
+        b = G.register_input_resource<int, graphe::resource_flags::permanent>("b");
     }
     void operator()()
     {
@@ -45,11 +45,11 @@ public:
 class C
 {
 public:
-    in_resource<int> c;
+    graphe::in_resource<int> c;
 
-    C( ResourceRegistry & G)
+    C( graphe::ResourceRegistry & G)
     {
-        c = G.register_input_resource<int, resource_flags::permanent>("c");
+        c = G.register_input_resource<int, graphe::resource_flags::permanent>("c");
     }
     void operator()()
     {
@@ -79,7 +79,7 @@ struct ThreadPoolWrapper
 
 int main()
 {
-  node_graph G;
+  graphe::node_graph G;
 
   G.add_oneshot_node<A>().set_name("A");
   G.add_node<B>().set_name("B");
@@ -90,7 +90,7 @@ int main()
   gnl::thread_pool T(4);   // create the threadpool with 4 workers
   ThreadPoolWrapper TW(T); // create the wrapper.
 
-  threaded_executor<ThreadPoolWrapper> Exec(G); // create the executor
+  graphe::threaded_executor<ThreadPoolWrapper> Exec(G); // create the executor
   Exec.set_thread_pool(&TW); // set the threadpool wrapper
 
   Exec.execute(); // execute

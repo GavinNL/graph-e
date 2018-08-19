@@ -5,6 +5,9 @@
 
 #include "node_graph.h"
 
+namespace graphe
+{
+
 
 class serial_executor
 {
@@ -45,6 +48,8 @@ protected:
     std::queue<exec_node*>                 m_ToExecute;
 
 };
+
+}
 
 #endif
 

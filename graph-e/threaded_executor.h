@@ -5,6 +5,10 @@
 
 #include "node_graph.h"
 
+namespace graphe
+{
+
+
 template<typename ThreadPool_t>
 class threaded_executor
 {
@@ -57,6 +61,8 @@ private:
     node_graph                 & m_graph;
     ThreadPool_t                          *m_thread_pool = nullptr;
 };
+
+}
 
 #endif
 

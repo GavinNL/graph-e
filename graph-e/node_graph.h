@@ -15,6 +15,8 @@
 #include <any>
 #include <iostream>
 
+namespace graphe
+{
 
 using time_point = std::chrono::system_clock::time_point;
 
@@ -769,7 +771,7 @@ inline void exec_node::trigger()
     }
 }
 
-bool exec_node::can_execute() const
+inline bool exec_node::can_execute() const
 {
     for(auto & R : m_requiredResources)
     {
@@ -785,6 +787,8 @@ bool exec_node::can_execute() const
         }
     }
     return true;
+}
+
 }
 
 #endif
