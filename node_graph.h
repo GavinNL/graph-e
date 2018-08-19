@@ -615,7 +615,6 @@ public:
         {
             if( N.second->get_flags() != resource_flags::permanent)
             {
-                std::cout <<  N.second->get_name() << " reset" << std::endl;
                 N.second->make_available(false);
             }
         }
