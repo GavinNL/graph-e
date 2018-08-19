@@ -16,7 +16,7 @@
 #include <iostream>
 
 
-using duration = std::chrono::microseconds;
+using time_point = std::chrono::system_clock::time_point;
 
 class node_graph;
 class exec_node;
@@ -60,7 +60,7 @@ protected:
     bool         m_executed = false;               // flag to indicate whether the node has been executed.
     node_graph * m_Graph; // the parent graph;
 
-    duration     m_exec_start_time_us;            // the time at which this node was executed
+    time_point     m_exec_start_time_us;            // the time at which this node was executed
 
     std::thread::id m_thread_id;                  // the id of the thread that executed this.
 
@@ -78,7 +78,15 @@ public:
     //    std::cout << "Node Destroyed: " << m_name << std::endl;
     }
 
+    time_point get_time()
+    {
+        return m_exec_start_time_us;
+    }
 
+    std::chrono::microseconds get_time(time_point start)
+    {
+        return std::chrono::duration_cast<std::chrono::microseconds>(m_exec_start_time_us-start);
+    }
     /**
      * @brief trigger
      *
@@ -130,9 +138,9 @@ protected:
     bool                     m_is_available = false;
     resource_flags           m_flags;
 
-
+    exec_node_w              m_parent;
 public:
-    duration m_time_available;
+    time_point m_time_available;
 
     ~resource_node()
     {
@@ -149,7 +157,7 @@ public:
     void make_available(bool av = true)
     {
         m_is_available = av;
-        m_time_available = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
+        m_time_available = std::chrono::system_clock::now();
     }
 
     resource_flags get_flags() const
@@ -168,6 +176,15 @@ public:
         return m_is_available;
     }
 
+    time_point get_time()
+    {
+        return m_time_available;
+    }
+    std::chrono::microseconds get_time(time_point start)
+    {
+        return std::chrono::duration_cast<std::chrono::microseconds>(m_time_available-start);
+    }
+
     /**
      * @brief get_resource
      * @return
@@ -179,6 +196,10 @@ public:
         return m_resource;
     }
 
+    bool has_parent() const
+    {
+        return m_parent.lock()!=nullptr;
+    }
     /**
      * @brief Get
      * @return
@@ -346,6 +367,8 @@ class ResourceRegistry
                 RN->m_name     = name;
                 RN->m_flags    = F;
 
+                RN->m_parent = m_Node;
+
                 m_Node->m_producedResources.push_back(RN);
                 m_resources[name] = RN;
 
@@ -491,7 +514,7 @@ public:
 
       // Create the functor which will execute the
       // Node's operator(data_t &d) method.
-      N->execute = [rawp]()
+      N->execute = [rawp,N]()
       {
           if( !rawp->m_executed ) // if we haven't executed yet.
           {
@@ -499,7 +522,7 @@ public:
               if( rawp->m_mutex.try_lock() ) // try to lock the mutex
               {                              // if we have acquired the lock, execute the node
                   rawp->m_executed = true;
-                  rawp->m_exec_start_time_us = std::chrono::duration_cast<duration>(std::chrono::system_clock::now().time_since_epoch());
+                  rawp->m_exec_start_time_us = std::chrono::system_clock::now();
 
                   //std::cout << "Executing: " << rawp->m_name << std::endl;
                   //for(auto & r : rawp->m_requiredResources)
@@ -519,6 +542,7 @@ public:
                   for(auto & r : rawp->m_producedResources)
                   {
                     auto R = r.lock();
+
                     if( !R->is_available() )
                     {
                         throw std::runtime_error( std::string("Node ") + rawp->get_name() + std::string(" failed to create resource: ") + R->get_name());
@@ -627,6 +651,25 @@ public:
         //std::cout << e->m_name <<( e->m_producedResources.size()==0?"\n":" -> ");
 
     }
+
+    void print_node(resource_node_p & N, time_point start)
+    {
+        std::cout << "{\n";
+        std::cout << "    rank=same \n";
+        std::cout << "    " << N->get_name() << "[shape=circle style=filled  color=\"0.650 0.700 0.700\"]\n";
+        std::cout << "    " << N->get_time(start).count() << "\n";
+        std::cout << "}" << std::endl;;
+    }
+
+    void print_node(exec_node_p & N, time_point start)
+    {
+        std::cout << "{\n";
+        std::cout << "    rank=same \n";
+        std::cout << "    " << N->get_name() << "[shape=square]\n";
+        std::cout << "    " << N->get_time(start).count() << "\n";
+        std::cout << "}" << std::endl;;
+    }
+
     /**
      * @brief print
      *
@@ -636,59 +679,46 @@ public:
     {
 
         std::map<std::thread::id, int> threadProps;
-        std::map<duration, int> nodes;
+        std::map<time_point, int> nodes;
 
-        int i=0;
+        auto min = m_exec_nodes[0]->get_time();
         for(auto & E : m_exec_nodes)
         {
-            auto c = E->m_exec_start_time_us;// - min;
-            nodes[c] = 0;
-
-            auto id = E->m_thread_id;
-            if( threadProps.count(id) == 0)
-            {
-                threadProps[id] = i++;
-            }
+            auto t = E->get_time();
+            min = std::min(min, t);
+            nodes[t]=0;
         }
         for(auto & E : m_resources)
         {
-            if(E.second->get_flags() == resource_flags::permanent) continue;
 
-            auto c = E.second->m_time_available;// - min;
-            nodes[c] = 0;
+            auto t = E.second->get_time();
+            if(E.second->get_flags() != resource_flags::permanent)
+            {
+                min    = std::min(min, t);
+            }
+            nodes[t]=0;
+
+
         }
+
         std::cout << "digraph G {" << std::endl;
 
-
         auto s = nodes.size();
-        auto min = nodes.begin()->first;
         for(auto & E : nodes)
         {
-            std::cout << (E.first-min).count() << (s==1? "\n":" -> ") ;
+            auto t = std::chrono::duration_cast<std::chrono::microseconds>(E.first - min).count();
+            std::cout << t << (s==1? "\n":" -> ") ;
             s--;
         };
 
+
         for(auto & E : m_exec_nodes)
         {
-            E->m_exec_start_time_us -= min;
-            auto c = E->m_exec_start_time_us.count();
-
-            std::cout << " {\n   rank=same " << std::endl;
-            std::cout << "   " <<  E->m_name << "[shape=square]" << std::endl;
-            std::cout << "   " <<  c  << std::endl;
-            std::cout << "}" << std::endl;
-
+            print_node(E,min);
         }
         for(auto & E : m_resources)
         {
-            E.second->m_time_available -= min;
-            auto c = E.second->m_time_available.count();// - min;
-
-            std::cout << " { rank=same " << std::endl;
-            std::cout <<  E.second->get_name() << " [shape=circle style=filled  color=\"0.650 0.700 0.700\"]" << std::endl;
-
-            if( E.second->get_flags() != resource_flags::permanent) std::cout <<  c  << std::endl;
-            std::cout << "}" << std::endl;
+            print_node(E.second,min);
         }
 
         for(auto & E : m_exec_nodes)

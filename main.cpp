@@ -121,7 +121,7 @@ class Node1
     Node1(ResourceRegistry & G)
     {
         // Node1 will promise to create resource y
-        y = G.register_output_resource<int, resource_flags::permenant>("y");
+        y = G.register_output_resource<int, resource_flags::permanent>("y");
     }
 
     void operator()()
@@ -153,7 +153,7 @@ class Node2
         // This means, Node 2 will only be scheduled once
         // node 0 has created x and node 1 has created y
         x = G.register_input_resource<int>("x"); // created by node 0
-        y = G.register_input_resource<int, resource_flags::permenant>("y"); // created by node 1
+        y = G.register_input_resource<int, resource_flags::permanent>("y"); // created by node 1
 
         // given x and y, Node2 will produce z
         z = G.register_output_resource<int>("z");

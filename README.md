@@ -1,100 +1,19 @@
 # Executable Node Graph
 
-Imagine 3 processes, A, B and C. Process B takes resource b and performs
-some additional computation. Process C takes resource c and does some computation. 
+Imagine 3 processes, A, B and C. Process B takes resource b and performs some
+additional computation. Process C takes resource c and does some computation.
 
-A simple graph of the execution might look like this. Time is (in arbitary units) is
-shown on the right.
+A simple graph of the execution might look like this.
 
-![Alt text](https://g.gravizo.com/svg?
-digraph G 
-{
-    { 
-        rank=same 
-        A [shape=box];
-        0 [shape = "circle" color="white" ];
-    }
-    { 
-        rank=same 
-        B [shape=box];
-        3 [shape = "circle" color="white" ];
-    }
+![alt text](images/simple.svg "Node")
 
-    { 
-        rank=same 
-        C [shape=box];
-        4 [shape = "circle" color="white" ];
-    }
+If process A is able to produce resource b first, we can schedule porcess B to
+execute on a separate thread as soon as b is produced instead of waiting until
+process A has been completed.
 
-    { 
-        rank=same 
-        b [shape=circle];
-        1 [shape = "circle" color="white" ];
-    }
-
-    { 
-    rank=same 
-        c [shape=circle];
-        2 [shape = "circle" color="white" ];
-    }
-
-    0->1->2->3->4
-
-    A -> b
-    A -> c
-
-    b -> B
-    c -> C
-}
-)
-
-But since process A produces b first and then c. We can schedule process B to execute on a separate thread
-as soon as b is created. And then when c is created we can schedule C to execute. In this case, the execution
-graph my look like this:
-
-![Alt text](https://g.gravizo.com/svg?
-digraph G 
-{
-    { 
-     rank=same 
-      A [shape=box];
-     0  [shape = "circle" color="white" ];
-    }
-    
-    
-    B [shape=box];
-    
-    { 
-     rank=same 
-     C [shape=box];
-     3  [shape = "circle" color="white" ];
-    }
-    
-    
-    { 
-     rank=same 
-      b [shape=circle];
-       1 [shape = "circle" color="white" ];
-      
-    }
-    { 
-     rank=same 
-      c [shape=circle];
-      2  [shape = "circle" color="white" ];
-    }
-
-    0->1->2->3
-    
-    A -> b
-    A -> c
-    b -> B
-    c -> C
-
-}
-)
-
-This library allows you to construct execution nodes and place them within a graph. It will make the appropriate links and schedule nodes for execution as they become available.
-
+This library allows you to construct execution nodes and place them within a
+graph. It will make the appropriate links and schedule nodes for execution as
+they become available.
 
 The above example can be seen in code here.
 
@@ -155,8 +74,8 @@ public:
 };
 ```
 
-We can now set up the graph and then execute it serially.  The print() method will pring out the execution
-as a Diagraph.
+We can now set up the graph and then execute it serially.  The print() method
+will print out the execution as a Diagraph.
 
 ```C++
 int main()
@@ -176,8 +95,10 @@ int main()
 
 ## Thread Pool Execution
 
-The above code can be executed using a thread pool. The only thing you have to do is provide a wrapper which allows it to schedule tasks. For example,
-using gnl::thread_pool (provided), we simply have to overload the () operator to push tasks on to the queue.
+The above code can be executed using a thread pool. The only thing you have to
+do is provide a wrapper which allows it to schedule tasks. For example, using
+gnl::thread_pool (provided), we simply have to overload the () operator to push
+tasks on to the queue.
 
 ```
 struct ThreadPoolWrapper
@@ -220,134 +141,38 @@ int main()
 
 ## Example 1: Serial Execution
 
-Simple serial execution of 3 nodes.
+Simple serial execution of 3 nodes. In this example Node A produces resources b
+after 500ms and resource c andfer 1000ms. Executing in serial mode shows that
+nodes A, B and C all execute roughly 500ms apart since a single thread can only
+execute one node at a time.
+
+![alt text](images/ex1_1.svg "Node")
+
 
 ## Example 2: Threadpool
 
-Same as example 1 but uses a thread pool
+Example 2 takes example 1 and executes the graph using a Thread Pool. In this case
+node B was able to execute as soon as resource b was available and C was able
+to execute as soon as resource c was available
+
+![alt text](images/ex2_1.svg "Node")
 
 ## Example 3: One-Shot node and Permanent Resources
 
-A One-Shot node is executed only once and then removed from the graph. A One-Shot node can only produce Permanent resources.
-A permanent resource is a resource that will not be reset when reset() is called and continues to exist until the Graph is destroyed.
+A One-Shot node is executed only once and then removed from the graph. A
+One-Shot node can only produce Permanent resources. A permanent resource is a
+resource that will not be reset when reset() is called and continues to exist
+until the Graph is destroyed.
 
-In this example we set up node A to be a one-shot node, producing permanent resources b and c. Once we execute the graph once, Node
-A is no longer needed and is deleted. On the second run, we see that Node A is not executed.
+In this example we set up node A to be a one-shot node, producing permanent
+resources b and c. Once we execute the graph once, Node A is no longer needed
+and is deleted. On the second run, we see that Node A is not executed.
 
-![Alt text](https://g.gravizo.com/svg?
-digraph G {
-0 -> 43 -> 500163
- {
-   rank=same 
-   A[shape=square]
-   0
-}
- {
-   rank=same 
-   B[shape=square]
-   43
-}
- {
-   rank=same 
-   C[shape=square]
-   500163
-}
- { rank=same 
-b [shape=circle style=filled  color="0.650 0.700 0.700"]
-}
- { rank=same 
-c [shape=circle style=filled  color="0.650 0.700 0.700"]
-}
-A -> b
-A -> c
-b -> B
-c -> C
-}
-)
+On the first execution, the graph looks similar to Example 2.
 
-![Alt text](https://g.gravizo.com/svg?
-digraph G {
-0 -> 44
- {
-   rank=same 
-   B[shape=square]
-   0
-}
- {
-   rank=same 
-   C[shape=square]
-   44
-}
- { rank=same 
-b [shape=circle style=filled  color="0.650 0.700 0.700"]
-}
- { rank=same 
-c [shape=circle style=filled  color="0.650 0.700 0.700"]
-}
-b -> B
-c -> C
-}
-)
+![alt text](images/ex3_1.svg "Node")
 
+But on the second execution you can see that both B and C execute almost instantly
+since both resources are still available.
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-![Alt text](https://g.gravizo.com/source/custom_mark10?https%3A%2F%2Fraw.githubusercontent.com%2FTLmaK0%2Fgravizo%2Fmaster%2FREADME.md)
-
-<details> 
-<summary></summary>
-custom_mark10
-  digraph G {
-    size ="4,4";
-    main [shape=box];
-    main -> parse [weight=8];
-    parse -> execute;
-    main -> init [style=dotted];
-    main -> cleanup;
-    execute -> { make_string; printf};
-    init -> make_string;
-    edge [color=red];
-    main -> printf [style=bold,label="100 times"];
-    make_string [label="make a string"];
-    node [shape=box,style=filled,color=".7 .3 1.0"];
-    execute -> compare;
-  }
-custom_mark10
-</details>
-
-```
-![Alt text](https://g.gravizo.com/source/custom_mark10?https%3A%2F%2Fraw.githubusercontent.com%2FTLmaK0%2Fgravizo%2Fmaster%2FREADME.md)
-<details> 
-<summary></summary>
-custom_mark10
-  digraph G {
-    size ="4,4";
-    main [shape=box];
-    main -> parse [weight=8];
-    parse -> execute;
-    main -> init [style=dotted];
-    main -> cleanup;
-    execute -> { make_string; printf};
-    init -> make_string;
-    edge [color=red];
-    main -> printf [style=bold,label="100 times"];
-    make_string [label="make a string"];
-    node [shape=box,style=filled,color=".7 .3 1.0"];
-    execute -> compare;
-  }
-custom_mark10
-</details>
-```
-
-
+![alt text](images/ex3_2.svg "Node")
