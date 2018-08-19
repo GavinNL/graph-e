@@ -4,10 +4,6 @@ cmake_minimum_required(VERSION 2.8.12)
 
 add_definitions("-std=c++17")
 
-        add_executable(main
-                       main.cpp)
- target_link_libraries(main pthread)
-
        add_executable(example_1_serial
                       example_1_serial.cpp)
 target_link_libraries(example_1_serial)
