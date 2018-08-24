@@ -80,12 +80,12 @@ public:
     //    std::cout << "Node Destroyed: " << m_name << std::endl;
     }
 
-    time_point get_time()
+    time_point get_time() const
     {
         return m_exec_start_time_us;
     }
 
-    std::chrono::microseconds get_time(time_point start)
+    std::chrono::microseconds get_time(time_point start) const
     {
         return std::chrono::duration_cast<std::chrono::microseconds>(m_exec_start_time_us-start);
     }
@@ -178,11 +178,11 @@ public:
         return m_is_available;
     }
 
-    time_point get_time()
+    time_point get_time() const
     {
         return m_time_available;
     }
-    std::chrono::microseconds get_time(time_point start)
+    std::chrono::microseconds get_time(time_point start) const
     {
         return std::chrono::duration_cast<std::chrono::microseconds>(m_time_available-start);
     }
