@@ -523,16 +523,10 @@ public:
 
               if( rawp->m_mutex.try_lock() ) // try to lock the mutex
               {                              // if we have acquired the lock, execute the node
+
+                  auto graph = rawp->m_Graph;
                   rawp->m_executed = true;
                   rawp->m_exec_start_time_us = std::chrono::system_clock::now();
-
-                  //std::cout << "Executing: " << rawp->m_name << std::endl;
-                  //for(auto & r : rawp->m_requiredResources)
-                  //{
-                  //    auto R = r.lock();
-                  //    std::cout <<  "  " << R->get_name() << "  available: " << R->is_available() << std::endl;
-                  //}
-
                   rawp->m_thread_id = std::this_thread::get_id();
                   //======== Exectue ========================
                   std::any_cast< Node_t&>( rawp->m_NodeClass )();
@@ -548,6 +542,15 @@ public:
                     if( !R->is_available() )
                     {
                         throw std::runtime_error( std::string("Node ") + rawp->get_name() + std::string(" failed to create resource: ") + R->get_name());
+                    }
+                  }
+
+                  if( !graph->busy() )
+                  {
+                    std::cout << "all threads finished" << std::endl;
+                    if(graph->onFinished)
+                    {
+                        graph->onFinished();
                     }
                   }
               }
@@ -593,25 +596,25 @@ public:
      */
     void reset(bool destroy_resources = false)
     {
-
+        //std::cout << "size: " << m_exec_nodes.size() << std::endl;
         m_exec_nodes.erase(std::remove_if(m_exec_nodes.begin(),
                                   m_exec_nodes.end(),
                                   [](exec_node_p & x)
                                   {
-                                      x->m_executed  = false;
-                                      x->m_scheduled = false;
-                                      //x->m_resourceCount = 0;
-                                      //std::cout << "Clearing " << x->m_name << std::endl;
 
-                                      if(x->get_flags() == node_flags::execute_once)
+                                      if(x->get_flags() == node_flags::execute_once && x->m_executed)
                                       {
+                                          x->m_executed  = false;
+                                          x->m_scheduled = false;
                                           x.reset();
                                           return true;
                                       }
+                                      x->m_executed  = false;
+                                      x->m_scheduled = false;
                                       return false;
                                   }),
                    m_exec_nodes.end());
-
+//        std::cout << "size: " << m_exec_nodes.size() << std::endl;
 
         for(auto & N : m_resources)
         {
@@ -746,6 +749,17 @@ public:
     {
         return m_numToExecute;
     }
+
+    /**
+     * @brief busy
+     * @return
+     *
+     * Returns true if the graph is busy. Ie; There are nodes running
+     */
+    bool busy() const
+    {
+        return m_numRunning!=0 || m_numToExecute!=0;
+    }
 protected:
 
     std::vector< exec_node_p >             m_exec_nodes;
@@ -757,6 +771,7 @@ protected:
    friend class exec_node;
 public:
    std::function<void(exec_node*)>  onSchedule;
+   std::function<void(void)>        onFinished;
 };
 
 inline void exec_node::trigger()

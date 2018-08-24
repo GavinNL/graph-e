@@ -4,6 +4,8 @@
 #define THREAD_POOL_EXECUTE_GRAPH_3_H
 
 #include "node_graph.h"
+#include <condition_variable>
+#include <mutex>
 
 namespace graphe
 {
@@ -19,6 +21,12 @@ public:
         {
             m_thread_pool->operator()(N->execute);
         };
+
+        graph.onFinished = [this]()
+        {
+           std::cout << "Notifying" << std::endl;
+           m_cv.notify_all();
+        };
     }
 
     void set_thread_pool(ThreadPool_t * T)
@@ -32,17 +40,13 @@ public:
     }
     ~threaded_executor()
     {
-        //std::cout << "execution_graph_base_thread_pool::Destructor!" << std::endl;
         wait();
-        //std::cout << "Waiting for threads to exit!" << std::endl;
     }
 
     void wait()
     {
-        while( m_graph.get_num_running() > 0 || m_graph.get_left_to_execute() > 0)
-        {
-            std::this_thread::sleep_for( std::chrono::microseconds(500));
-        }
+        std::unique_lock<std::mutex> lk(m_wait_lock);
+        m_cv.wait(lk, [this] { return !m_graph.busy(); } );
     }
 
     void execute()
@@ -59,7 +63,9 @@ public:
 
 private:
     node_graph                 & m_graph;
-    ThreadPool_t                          *m_thread_pool = nullptr;
+    ThreadPool_t               *m_thread_pool = nullptr;
+    std::mutex                  m_wait_lock;
+    std::condition_variable     m_cv;
 };
 
 }

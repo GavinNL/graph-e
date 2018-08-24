@@ -15,6 +15,11 @@ public:
         b = G.register_output_resource<int, graphe::resource_flags::permanent>("b");
         c = G.register_output_resource<int, graphe::resource_flags::permanent>("c");
     }
+    ~A()
+    {
+        std::cout << "A Deleted" << std::endl;
+    }
+
     void operator()()
     {
         std::this_thread::sleep_for( std::chrono::milliseconds(500));
@@ -39,6 +44,7 @@ public:
     {
         std::cout << b.get() << std::endl;
         std::this_thread::sleep_for( std::chrono::milliseconds(500));
+        std::cout << "B finished" << std::endl;
     }
 };
 
@@ -53,8 +59,9 @@ public:
     }
     void operator()()
     {
-        std::cout << c.get() << std::endl;
+        //std::cout << c.get() << std::endl;
         std::this_thread::sleep_for( std::chrono::milliseconds(500));
+        std::cout << "C finished" << std::endl;
     }
 };
 
@@ -96,15 +103,19 @@ int main()
   Exec.execute(); // execute
   Exec.wait();  // If using a threadpool, we must call wait() to wait until all the threads have executed.
 
-  G.print();
+ // G.print();
 
   G.reset();      // reset the resources making them unavailable.
                   // this must be called if you wish to execute the graph again.
 
-  Exec.execute(); // execute
-  Exec.wait();  // If using a threadpool, we must call wait() to wait until all the threads have executed.
+  while(1)
+  {
+      Exec.execute(); // execute
+      Exec.wait();  // If using a threadpool, we must call wait() to wait until all the threads have executed.
+      G.reset();
+  }
 
-  G.print();
+//  G.print();
 
   return 0;
 }
