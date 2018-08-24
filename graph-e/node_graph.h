@@ -14,6 +14,7 @@
 #include <queue>
 #include <any>
 #include <iostream>
+#include <type_traits>
 
 namespace graphe
 {
@@ -234,8 +235,12 @@ public:
         }
     }
 };
+std::vector<int> x;
 
-
+//===============================================================================
+template<typename T> struct is_shared_ptr : std::false_type {};
+template<typename T> struct is_shared_ptr<std::shared_ptr<T>> : std::true_type {};
+//===============================================================================
 /**
  * @brief The in_resource class
  *
@@ -244,6 +249,9 @@ public:
 template<typename T>
 class in_resource
 {
+    static constexpr bool is_fundamental = std::is_fundamental<T>::value;
+    static constexpr bool is_pointer_type  = (std::is_pointer<T>::value || is_shared_ptr<T>::value);
+
 protected:
     friend class ResourceRegistry;
     resource_node_w m_node;
@@ -259,6 +267,36 @@ public:
     {
         return m_node.lock()->Get<T>();
     }
+
+
+    //============================================================================
+    // Allows dereferencing if T is a fundamental type:
+    //============================================================================
+    template< typename U=T >
+    typename std::enable_if< std::is_same<T,U>::value && is_fundamental, U&>::type
+    operator*()
+    {
+        return get();
+    }
+
+    //============================================================================
+    // Allows allow using -> if T is a pointer
+    //============================================================================
+    template< typename U=T >
+    typename std::enable_if< std::is_same<T,U>::value && is_pointer_type, U&>::type
+    operator->()
+    {
+        return get();
+    }
+
+
+    template<
+    typename U = T,
+    typename = typename std::enable_if< std::is_same<T,U>::value >::type>
+    operator U() {
+        return get();
+    }
+
 };
 
 /**
