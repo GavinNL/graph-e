@@ -760,6 +760,24 @@ public:
     {
         return m_numRunning!=0 || m_numToExecute!=0;
     }
+
+    void setOnSchedule( std::function<void(exec_node*)> f)
+    {
+        onSchedule = f;
+    }
+    void clearOnSchedule()
+    {
+        onSchedule = std::function<void(exec_node*)>();
+    }
+
+    void setOnComplete( std::function<void(void)> f)
+    {
+        onFinished = f;
+    }
+    void clearOnComplete()
+    {
+        onFinished = std::function<void(void)> ();
+    }
 protected:
 
     std::vector< exec_node_p >             m_exec_nodes;
@@ -769,7 +787,7 @@ protected:
     uint32_t m_numToExecute = 0;
 
    friend class exec_node;
-public:
+
    std::function<void(exec_node*)>  onSchedule;
    std::function<void(void)>        onFinished;
 };

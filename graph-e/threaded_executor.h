@@ -17,16 +17,17 @@ class threaded_executor
 public:
     threaded_executor(node_graph & graph) : m_graph(graph)
     {
-        graph.onSchedule = [this](exec_node *N)
+        graph.setOnSchedule(
+        [this](exec_node *N)
         {
             m_thread_pool->operator()(N->execute);
-        };
+        });
 
-        graph.onFinished = [this]()
+        graph.setOnComplete(
+        [this]()
         {
-           std::cout << "Notifying" << std::endl;
            m_cv.notify_all();
-        };
+        });
     }
 
     void set_thread_pool(ThreadPool_t * T)
