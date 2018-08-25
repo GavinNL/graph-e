@@ -272,9 +272,7 @@ public:
     //============================================================================
     // Allows dereferencing if T is a fundamental type:
     //============================================================================
-    template< typename U=T >
-    typename std::enable_if< std::is_same<T,U>::value && is_fundamental, U&>::type
-    operator*()
+    T & operator*()
     {
         return get();
     }
@@ -554,7 +552,7 @@ public:
 
       // Create the functor which will execute the
       // Node's operator(data_t &d) method.
-      N->execute = [rawp,N]()
+      N->execute = [rawp]()
       {
           if( !rawp->m_executed ) // if we haven't executed yet.
           {
@@ -585,7 +583,6 @@ public:
 
                   if( !graph->busy() )
                   {
-                    std::cout << "all threads finished" << std::endl;
                     if(graph->onFinished)
                     {
                         graph->onFinished();
