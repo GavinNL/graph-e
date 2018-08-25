@@ -309,7 +309,8 @@ protected:
     friend class ResourceRegistry;
     resource_node_w m_node;
 public:
-
+    static constexpr bool is_fundamental = std::is_fundamental<T>::value;
+    static constexpr bool is_pointer_type  = (std::is_pointer<T>::value || is_shared_ptr<T>::value);
     /**
      * @brief get
      * @return
@@ -372,6 +373,35 @@ public:
     {
         m_node.lock()->get_resource() = std::move(x);
         if( make_avail) make_available();
+    }
+
+
+
+
+    //============================================================================
+    // Allows allow using -> if T is a pointer
+    //============================================================================
+    template< typename U=T >
+    typename std::enable_if< std::is_same<T,U>::value && is_pointer_type, U&>::type
+    operator->()
+    {
+        return get();
+    }
+
+
+    template<
+    typename U = T,
+    typename = typename std::enable_if< std::is_same<T,U>::value >::type>
+    operator U() {
+        return get();
+    }
+
+    //============================================================================
+    // Allows dereferencing if T is a fundamental type:
+    //============================================================================
+    T & operator*()
+    {
+        return get();
     }
 };
 
@@ -696,7 +726,7 @@ public:
         std::cout << "{\n";
         std::cout << "    rank=same \n";
         std::cout << "    " << N->get_name() << "[shape=circle style=filled  color=\"0.650 0.700 0.700\"]\n";
-        std::cout << "    " << N->get_time(start).count() << "\n";
+        if(N->get_time(start).count() != 0) std::cout << "    " << N->get_time(start).count() << "\n";
         std::cout << "}" << std::endl;;
     }
 
@@ -705,7 +735,7 @@ public:
         std::cout << "{\n";
         std::cout << "    rank=same \n";
         std::cout << "    " << N->get_name() << "[shape=square]\n";
-        std::cout << "    " << N->get_time(start).count() << "\n";
+        if(N->get_time(start).count() != 0) std::cout << "    " << N->get_time(start).count() << "\n";
         std::cout << "}" << std::endl;;
     }
 
